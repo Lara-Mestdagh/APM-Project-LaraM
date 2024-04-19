@@ -69,7 +69,7 @@ def client_handler(client_socket, addr, gui_queue):
                 data = client_socket.recv(1024).decode('utf-8')
                 if not data or data == "EXIT":
                     break
-                if data == "PING":
+                if data == "PING\n":
                     client_socket.send("PONG".encode('utf-8'))
                 logging.info(f"Received from {addr}: {data}")
         finally:
