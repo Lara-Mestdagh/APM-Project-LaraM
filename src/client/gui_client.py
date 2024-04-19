@@ -68,6 +68,8 @@ class ProjectVillagersClient(tk.Tk):
     # --------------------------------------------------------------------------------------------
     def listen_to_server(self):
         """Listen to the server and put messages into the queue."""
+        # log listening to server
+        logging.info('Listening to server...')
         while True:
             try:
                 message = self.client_socket.recv(1024).decode('utf-8')
@@ -75,8 +77,16 @@ class ProjectVillagersClient(tk.Tk):
             except ConnectionAbortedError:
                 # Handle the disconnection
                 self.message_queue.put("Disconnected from server")
+                logging.error('Connection was aborted')
+                break
+            except OSError as e:
+                # Handle general OS errors
+                self.message_queue.put("OS error occurred")
+                logging.error(f'OS error: {e}')
                 break
             except Exception as e:
+                # Handle other exceptions
+                self.message_queue.put("An error occurred")
                 logging.error(f'Error receiving message from server: {e}')
                 break
 

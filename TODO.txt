@@ -1,3 +1,16 @@
+TODO:
+- when client disconnects, remove option from list to message
+- show client to server messages in the window, not console
+- look into changing the view of both windows, some kind of UI?
+- after sending a message, clear the textbox
+- add timestamps to all messages?
+
+
+
+
+
+
+
 Planned possibilities:
 - Graph all villagers by race, personality, and hobby.
 - Search all villagers by filtering by race, personality, birthday, and hobby.
