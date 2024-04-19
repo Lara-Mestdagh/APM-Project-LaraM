@@ -1,83 +1,99 @@
 import socket
 import threading
 import tkinter as tk
+from tkinter import scrolledtext, simpledialog, messagebox
 from queue import Queue
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class ServerGUI(tk.Tk):
     def __init__(self, queue):
         super().__init__()
         self.queue = queue
-        self.client_sockets = {}  # Dictionary to keep track of client sockets
+        self.clients = {}
+        self.client_vars = {}
+
         self.init_ui()
+        self.after(100, self.process_queue)
 
     def init_ui(self):
         self.title("Server Messages")
-        self.geometry('800x600')
+        self.geometry("800x600")
 
-        self.text_area = tk.Text(self, height=20, width=100)
-        self.text_area.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+        self.text_area = scrolledtext.ScrolledText(self, height=10, width=50)
+        self.text_area.pack(padx=10, pady=10)
 
         self.message_entry = tk.Entry(self)
-        self.message_entry.pack(padx=10, pady=10, fill=tk.X)
-
-        self.send_button = tk.Button(self, text="Send Message to Client", command=self.send_message_to_client)
+        self.message_entry.pack(fill=tk.X, padx=10, pady=10)
+        
+        self.send_button = tk.Button(self, text="Send Message to Selected Clients", command=self.send_message_to_clients)
         self.send_button.pack(pady=10)
 
-        self.after(100, self.process_queue)
+        self.client_list_frame = tk.LabelFrame(self, text="Connected Clients")
+        self.client_list_frame.pack(fill=tk.BOTH, expand=True)
 
     def process_queue(self):
         while not self.queue.empty():
-            message = self.queue.get()
-            self.text_area.insert(tk.END, message + "\n")
+            addr, connected = self.queue.get()
+            if connected:
+                var = tk.BooleanVar(value=False)
+                rb = tk.Checkbutton(self.client_list_frame, text=str(addr), variable=var)
+                rb.pack(anchor='w')
+                self.client_vars[addr] = var
+                self.clients[addr] = connected
+            else:
+                if addr in self.client_vars:
+                    self.client_vars[addr].get_widget().destroy()
+                    del self.client_vars[addr]
+                    del self.clients[addr]
         self.after(100, self.process_queue)
 
-    def send_message_to_client(self):
+    def send_message_to_clients(self):
         message = self.message_entry.get()
-        if message:
-            # Assuming you want to broadcast to all connected clients
-            for address, client_socket in self.client_sockets.items():
+        message += "\n"
+        for addr, var in self.client_vars.items():
+            if var.get():
+                client = self.clients[addr]
                 try:
-                    client_socket.send(message.encode('utf-8'))
+                    client.send(message.encode('utf-8'))
                 except Exception as e:
-                    print(f"Could not send message to {address}: {e}")
+                    logging.error(f"Failed to send message to {addr}: {e}")
 
-# --------------------------------------------------------------------------------------------
-def client_handler(connection, address, queue, client_sockets):
-    with connection:
-        client_sockets[address] = connection
-        queue.put(f"Client {address} connected")
-        while True:
-            try:
-                data = connection.recv(1024).decode('utf-8')
-                if not data:
+def client_handler(client_socket, addr, gui_queue):
+    with client_socket:
+        gui_queue.put((addr, client_socket))  # Notify GUI of new connection
+        try:
+            while True:
+                data = client_socket.recv(1024).decode('utf-8')
+                if not data or data == "EXIT":
                     break
-                queue.put(f"Received '{data}' from {address}")
-            except ConnectionResetError:
-                queue.put(f"Client {address} has disconnected")
-                break
-        del client_sockets[address]
-        queue.put(f"Client {address} connection closed")
+                if data == "PING":
+                    client_socket.send("PONG".encode('utf-8'))
+                logging.info(f"Received from {addr}: {data}")
+        finally:
+            client_socket.close()
+            gui_queue.put((addr, None))  # Signal client disconnection
+            logging.info(f"Client {addr} has disconnected")
 
-# --------------------------------------------------------------------------------------------
-def start_server(host, port, gui_queue, client_sockets):
+def start_server(host, port, gui_queue):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
         server_socket.bind((host, port))
-        server_socket.listen(5)
-        gui_queue.put(f"Server started on {host}:{port}. Waiting for connections...")
-        
-        while True:
-            connection, address = server_socket.accept()
-            threading.Thread(target=client_handler, args=(connection, address, gui_queue, client_sockets), daemon=True).start()
+        server_socket.listen()
+        logging.info(f"Server started on {host}:{port}")
 
-# --------------------------------------------------------------------------------------------
+        while True:
+            client_sock, addr = server_socket.accept()
+            threading.Thread(target=client_handler, args=(client_sock, addr, gui_queue), daemon=True).start()
+
 if __name__ == "__main__":
     gui_queue = Queue()
-    client_sockets = {}
     server_gui = ServerGUI(gui_queue)
     
     host = 'localhost'
     port = 12345
-    server_thread = threading.Thread(target=start_server, args=(host, port, gui_queue, client_sockets), daemon=True)
+    server_thread = threading.Thread(target=start_server, args=(host, port, gui_queue), daemon=True)
     server_thread.start()
 
     server_gui.mainloop()

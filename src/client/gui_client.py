@@ -112,16 +112,14 @@ class ProjectVillagersClient(tk.Tk):
 
     # --------------------------------------------------------------------------------------------
     def on_closing(self):
-        # Notify the server that we're about to close
         try:
             self.client_socket.send('EXIT'.encode('utf-8'))
-            # Give the server a moment to process the exit message
             self.client_socket.shutdown(socket.SHUT_RDWR)
             self.client_socket.close()
         except Exception as e:
             logging.error(f'Error closing client: {e}')
         finally:
-            self.destroy()  # This will close the Tkinter app
+            self.destroy()
 
 # --------------------------------------------------------------------------------------------
 if __name__ == "__main__":
