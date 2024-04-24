@@ -4,14 +4,20 @@ import tkinter as tk
 from tkinter import messagebox
 import threading
 from queue import Queue
+import customtkinter
 
 class ProjectVillagersClient(tk.Tk):
     def __init__(self):
         super().__init__()
+        self.running = True
         self.title("Project Villagers Client - Lara Mestdagh")
-        # Set up logging
+        self.geometry("800x600")  # Window size
+        customtkinter.set_appearance_mode("light")
+        customtkinter.set_default_color_theme("green")  # Themes: "blue" (standard), "green", "dark-blue"
         logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
         logging.info('Starting Project Villagers client...')
+
+        self.initWindow()  # Call the initWindow method to initialize the window
 
         # Connect to server
         self.connect_to_server()
@@ -19,6 +25,14 @@ class ProjectVillagersClient(tk.Tk):
         # Initialize the Queue
         self.message_queue = Queue()
 
+        # Start the listener thread
+        self.start_listener()
+
+        # Start processing the queue
+        self.after(100, self.process_queue)
+
+    # --------------------------------------------------------------------------------------------
+    def initWindow(self):
         # Create GUI components
         self.ping_button = tk.Button(self, text="Ping Server", command=self.ping_server)
         self.ping_button.pack()
@@ -31,12 +45,6 @@ class ProjectVillagersClient(tk.Tk):
 
         self.response_text = tk.Text(self, height=10, width=50)
         self.response_text.pack()
-
-        # Start the listener thread
-        self.start_listener()
-
-        # Start processing the queue
-        self.after(100, self.process_queue)
 
     # --------------------------------------------------------------------------------------------
     def start_listener(self):
@@ -102,7 +110,7 @@ class ProjectVillagersClient(tk.Tk):
         """Send a ping message to the server."""
         try:
             logging.info('Pinging server...')
-            self.client_socket.send('PING'.encode('utf-8'))
+            self.client_socket.send('PING\n'.encode('utf-8'))
             # No need to wait for a response here, it will be handled by the listener thread
         except Exception as e:
             logging.error(f'Error pinging server: {e}')
@@ -123,7 +131,7 @@ class ProjectVillagersClient(tk.Tk):
     # --------------------------------------------------------------------------------------------
     def on_closing(self):
         try:
-            self.client_socket.send('EXIT'.encode('utf-8'))
+            self.client_socket.send('EXIT\n'.encode('utf-8'))
             self.client_socket.shutdown(socket.SHUT_RDWR)
             self.client_socket.close()
         except Exception as e:
