@@ -1,174 +1,141 @@
-import logging
-import socket
-import tkinter as tk
-from tkinter import *
-from tkinter import messagebox
-import threading
+import customtkinter as ctk
+import tkinter.messagebox as msgbox
 import queue
-import customtkinter
+import time
+import logging
+from clienthandler import ClientHandler
 
-class ProjectVillagersClient(tk.Tk):
-    def __init__(self):
-        super().__init__()
-        self.running = True
-        self.title("Project Villagers Client - Lara Mestdagh")
-        self.geometry("800x600")  # Window size
-        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-        logging.info('Starting Project Villagers client...')
-        self.initWindow()  # Call the initWindow method to initialize the window
-        self.makeConnectionWithServer()
+# Setup logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-        # Create a thread-safe queue for communication between threads
-        self.gui_queue = queue.Queue()
+HOST = 'localhost'
+PORT = 5000
+message_queue = queue.Queue()
 
-        # Start a thread to handle GUI updates from the queue
-        threading.Thread(target=self.process_gui_queue, daemon=True).start()
+app = ctk.CTk()
+app.title("Application")
+app.geometry("450x400")
 
-        # Start the main event loop
-        self.mainloop()
+def clear_window():
+    for widget in app.winfo_children():
+        widget.destroy()
+
+def show_retry_connection():
+    clear_window()
+    title = ctk.CTkLabel(master=app, text="Connection Error")
+    title.pack(pady=10)
+
+    message = ctk.CTkLabel(master=app, text="Failed to connect to the server. Trying again...")
+    message.pack(pady=10)
+
+    retry_button = ctk.CTkButton(master=app, text="Retry Connection", command=attempt_reconnect)
+    retry_button.pack(pady=20)
+
+    back_button = ctk.CTkButton(master=app, text="Exit", command=app.quit)
+    back_button.pack(pady=10)
+
+def attempt_reconnect():
+    logging.info("Attempting to reconnect to the server...")
+    for _ in range(3):  # Try to connect three times
+        try:
+            client_handler.connect_to_server()
+            if client_handler.running:
+                show_login()  # Or show_dashboard() if you want to go straight to the dashboard after reconnecting
+                return
+            time.sleep(1)  # Wait for a second before retrying
+        except Exception as e:
+            logging.error(f"Retry failed: {e}")
+    logging.error("Failed to connect to the server. Check your network and try again.")
+
+def logout():
+    if client_handler.running:
+        client_handler.close_connection()
+    show_login()
+
+def show_dashboard():
+    clear_window()
+    title = ctk.CTkLabel(master=app, text="Dashboard", font=("Arial", 15, "bold"))
+    title.pack(pady=10)
+
+    logout_button = ctk.CTkButton(master=app, text="Logout", command=logout)
+    logout_button.pack(pady=20)
+
+    message_input = ctk.CTkEntry(master=app)
+    message_input.pack(pady=10, fill="x")
+
+    message_display = ctk.CTkTextbox(master=app, state='disabled', height=10)
+    message_display.pack(pady=20, fill="both", expand=True)
+
+    send_button = ctk.CTkButton(master=app, text="Send Message", command=lambda: client_handler.send_message(message_input.get()))
+    send_button.pack(pady=10)
+
+    print("Dashboard is now displayed.")
+
+def update_gui():
+    while not message_queue.empty():
+        try:
+            command, data = message_queue.get_nowait()
+            if command == "show_dashboard":
+                show_dashboard()
+            elif command == "login_failed":
+                msgbox.showwarning("Login Failed", data if data else "Unknown error")
+            elif command == "connection_error":
+                show_retry_connection()
+            else:
+                logging.error(f"Unhandled command: {command}")
+        except ValueError as e:
+            logging.error(f"Queue message unpacking error: {e}")
+        except Exception as e:
+            logging.error(f"General error processing GUI update: {e}")
+    app.after(100, update_gui)
 
 
-    # Creation of init_window
-    def initWindow(self):
-        # Change the title of our widget
-        self.title("Login Page")
+def show_login():
+    clear_window()
+    title = ctk.CTkLabel(master=app, text="Login")
+    title.pack(pady=10)
 
-        customtkinter.set_appearance_mode("light")
-        customtkinter.set_default_color_theme("green")  # Themes: "blue" (standard), "green", "dark-blue"
+    username_entry = ctk.CTkEntry(master=app, placeholder_text="Username")
+    username_entry.pack(pady=10)
+    username_entry.focus_set()  # Set focus to the username entry
 
-        # Title label
-        self.label_title = customtkinter.CTkLabel(self, text="Login", font=("Arial", 24))
-        self.label_title.pack(pady=8)  # Add some vertical padding
+    password_entry = ctk.CTkEntry(master=app, placeholder_text="Password", show="*")
+    password_entry.pack(pady=10)
 
-        # Username label and text entry box
-        self.label_username = customtkinter.CTkLabel(self, text="Username:", font=("Arial", 16))
-        self.label_username.pack(pady=8)  # Add some vertical padding
-        self.entry_username = customtkinter.CTkEntry(self, width=200, placeholder_text="Enter username", font=("Arial", 16))
-        self.entry_username.pack()
+    def on_enter_key(event):
+        client_handler.login(username_entry.get(), password_entry.get())  # Trigger login on Enter key
+    app.bind('<Return>', on_enter_key)  # Bind the Enter key to the login action
 
-        # Password label and password entry box
-        self.label_password = customtkinter.CTkLabel(self, text="Password:", font=("Arial", 16))
-        self.label_password.pack(pady=8)  # Add some vertical padding
-        self.entry_password = customtkinter.CTkEntry(self, width=200, placeholder_text="Enter password", show="*", font=("Arial", 16))
-        self.entry_password.pack()
+    login_button = ctk.CTkButton(master=app, text="Login", command=lambda: client_handler.login(username_entry.get(), password_entry.get()))
+    login_button.pack(pady=10)
 
-        # Login button
-        self.button_login = customtkinter.CTkButton(self, text="Login", command=self.loginCallback, font=("Arial", 16))
-        self.button_login.pack(pady=16)  # Add some vertical padding
+    register_button = ctk.CTkButton(master=app, text="Register", command=show_register)
+    register_button.pack(pady=10)
 
-        # Register button
-        self.button_register = customtkinter.CTkButton(self, text="Register", command=self.registerCallback, font=("Arial", 16))
-        self.button_register.pack()
+def show_register():
+    clear_window()
+    title = ctk.CTkLabel(master=app, text="Register")
+    title.pack(pady=10)
 
-        # Exit button
-        self.button_exit = customtkinter.CTkButton(self, text="Exit App", command=self.exitApp, font=("Arial", 16))
-        self.button_exit.pack(pady=16)  # Add some padding and pack the button
+    name_entry = ctk.CTkEntry(master=app, placeholder_text="Name")
+    name_entry.pack(pady=10)
+
+    username_entry = ctk.CTkEntry(master=app, placeholder_text="Username")
+    username_entry.pack(pady=10)
+
+    email_entry = ctk.CTkEntry(master=app, placeholder_text="Email")
+    email_entry.pack(pady=10)
+
+    password_entry = ctk.CTkEntry(master=app, placeholder_text="Password", show="*")
+    password_entry.pack(pady=10)
+
+    register_button = ctk.CTkButton(master=app, text="Register", command=lambda: client_handler.register(name_entry.get(), username_entry.get(), email_entry.get(), password_entry.get()))
+    register_button.pack(pady=10)
+
+    back_button = ctk.CTkButton(master=app, text="Back", command=show_login)
+    back_button.pack(pady=10)
     
-    def __del__(self):
-        logging.info("Closing frame")
-        self.closeConnection()
-
-    def exitApp(self):
-        self.running = False
-        self.closeConnection()
-        self.destroy()  # This method closes the tkinter window
-
-    def process_gui_queue(self):
-        # This method runs on the main/UI thread and processes messages from the queue
-        while self.running:
-            try:
-                # Get a message from the queue
-                message_type, message = self.gui_queue.get(block=True)
-                # Process the message (e.g., update the GUI)
-                logging.info(f"Processing GUI queue message: {message}")
-                if message_type == "Server Response":
-                    self.after(0, lambda: messagebox.showinfo("Server Response", message))
-                elif message_type == "Error":
-                    self.after(0, lambda: messagebox.showinfo("Error", message))
-            except queue.Empty:
-                # Handle empty queue (no messages to process)
-                pass
-            except Exception as e:
-                # Handle other exceptions
-                logging.error(f"Error processing GUI queue: {e}")
-
-    def makeConnectionWithServer(self, attempts=3):
-        while attempts > 0:
-            try:
-                logging.info('Attempting to make connection with server...')
-                host = socket.gethostname()
-                port = 12345
-                self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                self.s.connect((host, port))
-                self.in_out_server = self.s.makefile(mode='rw')
-                logging.debug('Connection established with server.')  # Change to DEBUG level if INFO is too verbose
-                return True
-            except Exception as e:
-                logging.error('Error making connection with server: %s', e)
-                messagebox.showinfo("Error", f"Attempt {4 - attempts} failed: {e}")
-                attempts -= 1
-                if attempts == 0:
-                    messagebox.showinfo("Error", "Failed to connect to server after several attempts.")
-                return False
-
-    def closeConnection(self):
-        try:
-            logging.info('Closing connection with server...')
-            self.in_out_server.write("CLOSE\n")
-            self.in_out_server.flush()
-            self.s.close()
-            logging.info('Connection closed with server...')
-        except Exception as e:
-            logging.error('Error closing connection with server: %s', e)
-            messagebox.showinfo("Error", f"Error closing connection with server: {e}")
-
-    def loginCallback(self):
-        # Handle login button click
-        # Log the event
-        logging.info("Login button pressed")
-        # Get username and password
-        username = self.entry_username.get()
-        password = self.entry_password.get()
-        if username and password:
-            # Start a thread to handle the login
-            threading.Thread(target=self.handleLogin, args=(username, password)).start()
-        else:
-            messagebox.showinfo("Error", "Username and password cannot be empty.")
-
-    def handleLogin(self, username, password):
-        try:
-            # Send login command to the server
-            self.in_out_server.write(f"LOGIN {username} {password}\n")
-            self.in_out_server.flush()
-            # Wait for response from the server
-            response = self.in_out_server.readline().strip()
-            # Put the response message in the GUI queue to update the GUI
-            self.gui_queue.put(response)
-        except Exception as e:
-            # Handle exceptions
-            logging.error('Error sending login command: %s', e)
-            self.gui_queue.put(f"Error sending login command: {e}")
-
-    def registerCallback(self):
-        logging.info("Register button pressed")
-        username = self.entry_username.get()
-        password = self.entry_password.get()
-        if username and password:
-            threading.Thread(target=self.handleRegister, args=(username, password)).start()
-        else:
-            messagebox.showinfo("Error", "Username and password cannot be empty.")
-
-    def handleRegister(self, username, password):
-        try:
-            self.in_out_server.write(f"REGISTER {username} {password}\n")
-            self.in_out_server.flush()
-            response = self.in_out_server.readline().strip()
-            self.gui_queue.put(response)
-        except Exception as e:
-            logging.error('Error sending register command: %s', e)
-            self.gui_queue.put(f"Error sending register command: {e}")
-
-if __name__ == "__main__":
-    app = ProjectVillagersClient()
-    app.protocol("WM_DELETE_WINDOW", app.exitApp)
-    app.mainloop()
+client_handler = ClientHandler(HOST, PORT, message_queue)
+app.after(100, update_gui)
+show_login()
+app.mainloop()

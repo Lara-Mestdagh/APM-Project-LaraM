@@ -1,9 +1,10 @@
 TODO:
-- when client disconnects, remove option from list to message
-- server to client messages not working
-- look into changing the view of both windows, some kind of UI?
-- after sending a message, clear the textbox
-- add timestamps to all messages?
+- if server is not on, still start client with retry conenction screen?
+- login not going to dashboard with standard user
+- register only sometimes work
+- need error handling in the client gui
+- make a txt log of client actions?
+
 
 
 
@@ -43,6 +44,3 @@ Important:
 - Server moderator keeps track of asked searches.
 - Server moderator can check which searches are popular.
 - Server moderator can send a warning to clients.
-
-Ideas:
-- Connect a second dataset with an image of each villager? Or somehow combine those datasets?
