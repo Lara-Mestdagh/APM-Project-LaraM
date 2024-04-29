@@ -23,10 +23,17 @@ client_checkboxes = {}
 def create_server_gui():
     global clients_frame, message_input, message_display, app, server_status
     app = ctk.CTk()
-    app.title("Server Control")
-    app.geometry("450x600")
+    app.title("APM - Animal Crossing Villagers - Server")
+    app.geometry("500x600")
 
-    server_status = ctk.CTkLabel(master=app, text="Server Status: Stopped", fg_color='red', width=140, height=40)
+    server_status = ctk.CTkLabel(
+        master=app, 
+        text="Server Status", 
+        fg_color='red', 
+        width=120, 
+        height=40,
+        border_width=5,
+        corner_radius=10)
     server_status.pack(pady=20)
 
     start_button = ctk.CTkButton(master=app, text="Start Server", command=start_server)
@@ -46,6 +53,35 @@ def create_server_gui():
 
     message_display = ctk.CTkTextbox(master=app, state='disabled', height=10)
     message_display.pack(pady=20, fill="both", expand=True)
+
+
+
+def send_message(client_socket, data):
+    serialized_data = pickle.dumps(data)
+    message_length = len(serialized_data).to_bytes(4, 'big')  # 4 bytes to represent the length
+    client_socket.sendall(message_length + serialized_data)
+
+def receive_message(client_socket):
+    try:
+        header = client_socket.recv(4)
+        if not header:
+            raise ConnectionError("Failed to receive data: Connection was closed.")
+
+        message_length = int.from_bytes(header, 'big')
+        data = b''
+        while len(data) < message_length:
+            packet = client_socket.recv(message_length - len(data))
+            if not packet:
+                raise ConnectionError("Failed to receive full message: Connection was closed.")
+            data += packet
+
+        return pickle.loads(data)
+    except Exception as e:
+        logging.error(f"Error receiving or decoding message: {e}")
+        return None
+
+
+
 
 def on_send():
     global message_input, message_display
