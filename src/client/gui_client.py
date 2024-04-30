@@ -87,6 +87,10 @@ def update_gui():
                 print("Connection to server successful.")
             elif command == "connection_closed":
                 print("Connection to server closed.")
+            elif command == "show_login":
+                show_login()
+            elif command == "login_failed":
+                logging.error(f"Login failed: {data}")
             # if the command is empty, it is a message from the server
             elif command == "message":
                 show_message(f"server: {data}")

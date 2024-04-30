@@ -1,9 +1,6 @@
 TODO:
-- if server is not on, still start client with retry conenction screen?
-- login not going to dashboard with standard user
-- register only sometimes work
-- need error handling in the client gui
-- make a txt log of client actions?
+- add registration
+- read in dataset when server starts, add error logging to this
 
 
 

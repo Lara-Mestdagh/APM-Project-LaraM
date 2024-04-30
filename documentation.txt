@@ -12,3 +12,4 @@ I decided it was better to use a clienthandler and added this to the server fold
 
 I took a lot of work for me to figure out how to get a better GUI, a proper login with connected clients shown and being able to send messages to and from each other.
 The next step was a bit easier to implement the registration.
+I decided to add some simple checks, the main one being that usernames are unique, an email check and passwords need at least 4 characters.

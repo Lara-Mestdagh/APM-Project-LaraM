@@ -62,6 +62,17 @@ class ClientHandler:
             else:
                 print("Login failed, showing error message.")
                 self.message_queue.put(("login_failed", message))
+        elif response['type'] == 'register_response':
+            status = response.get('status', 'failure')
+            message = response.get('message', 'No message provided')
+            if status == 'success':
+                print("Registration successful, updating GUI to show login.")
+                self.message_queue.put(("show_login", None))
+            else:
+                print("Registration failed, showing error message.")
+                self.message_queue.put(("login_failed", message))
+        else:
+            self.handle_error(response)
 
     def handle_error(self, response):
         logging.error(f"Error from server: {response['message']}")
@@ -109,3 +120,6 @@ class ClientHandler:
 
     def logout(self):  
         self.send_message({'type': 'logout'})
+
+    def request_data(self):
+        self.send_message({'type': 'request_data'})

@@ -7,6 +7,10 @@ import hashlib
 import pickle
 import os
 import logging
+import pandas as pd
+import matplotlib.pyplot as plt
+import math
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -82,7 +86,7 @@ def update_server_status(status):
     server_status.configure(text=f"Server Status: {status}", fg_color=('white', color))
 
 def start_server():
-    global server_socket, server_thread, server_running, server_status
+    global server_socket, server_thread, server_running, server_status, dataset
     if not server_running:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -94,7 +98,20 @@ def start_server():
         server_thread = threading.Thread(target=accept_connections)
         server_thread.start()
         server_status.configure(text="Server Status: Running", fg_color='green')
+        # Load the dataset when the server starts
+        dataset = read_dataset()
+
         logging.info("Server started")
+
+def read_dataset():
+    # Load the dataset from the file 
+    try:
+        dataset = pd.read_csv("./data/Animal_Crossing_Villagers.csv")
+        logging.info("Dataset loaded successfully")
+        return dataset
+    except Exception as e:
+        logging.error(f"Error loading dataset: {e}")
+        return None
 
 def stop_server():
     global server_socket, server_thread, server_running, server_status
@@ -208,6 +225,11 @@ def process_client_message(client_socket):
             clients[client_socket]["username"] = "Unknown"
             update_client_list_display()
             pass
+        elif message['type'] == 'request_data':
+            logging.info(f"Client {clients[client_socket]['username']} has requested data")
+        elif message['type'] == 'register':
+            logging.info(f"Client {clients[client_socket]['username']} has requested to register")
+            handle_register(message, client_socket)
         else:
             logging.error(f"Unknown message type: {message['type']}")
     except Exception as e:
@@ -277,32 +299,65 @@ def load_credentials():
     logging.info(f"Loaded credentials successfully: {user_credentials}")
     return user_credentials
 
+def handle_register(message, client_socket):
+    # here we will handle the registration of a new user
+    user_credentials = load_credentials()
+    name = message['name']
+    username = message['username']
+    email = message['email']
+    password = message['password']
+
+    if username in user_credentials:
+        response = {'type': 'register_response', 'status': 'failure', 'message': 'Username already exists'}
+        logging.warning(f"Registration attempt denied for {username}: Username already exists.")
+    elif len(password) < 4:
+        response = {'type': 'register_response', 'status': 'failure', 'message': 'Password must be at least 4 characters'}
+        logging.warning(f"Registration attempt denied for {username}: Password too short.")
+    elif not email or '@' not in email:
+        response = {'type': 'register_response', 'status': 'failure', 'message': 'Invalid email address'}
+        logging.warning(f"Registration attempt denied for {username}: Invalid email address.")
+    else:
+        hashed_password = hash_password(password)
+        with open("./data/user_credentials.txt", "a") as file:
+            file.write(f"{username},{hashed_password},{name},{email}\n")
+        response = {'type': 'register_response', 'status': 'success', 'message': 'Registration successful'}
+        logging.info(f"Registration successful for {username}")
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {username}: {e}")
+
+
 def handle_login(message, client_socket):
+    user_credentials = load_credentials()
     username = message['username']
     password = message['password']
     hashed_password = hash_password(password)
-    user_credentials = load_credentials()
 
-    # Check if the username is already logged in from another socket
-    if any(client['username'] == username for client in clients.values() if client_socket != client):
+    logging.info(f"Login attempt for {username} with password {password}")
+    logging.info(f"Hashed password: {hashed_password}")
+
+    if username not in user_credentials:
+        response = {'type': 'login_response', 'status': 'failure', 'message': 'Username not found'}
+        logging.warning(f"Login attempt denied for {username}: Username not found.")
+    elif any(client['username'] == username for client in clients.values()):
         response = {'type': 'login_response', 'status': 'failure', 'message': 'User already logged in'}
         logging.warning(f"Login attempt denied for {username}: User already logged in.")
-    elif username in user_credentials and user_credentials[username] == hashed_password or (username == "user" and password == "root"):
-        # Update the username in the clients dictionary
-        if client_socket in clients:
-            clients[client_socket]["username"] = username
-        response = {'type': 'login_response', 'status': 'success', 'message': 'Login successful'}
-        logging.info(f"{username} has logged in successfully from {clients[client_socket]['address']}")
     else:
-        response = {'type': 'login_response', 'status': 'failure', 'message': 'Login failed'}
-        logging.error(f"Failed login attempt for {username} from {clients[client_socket]['address'] if client_socket in clients else 'Unknown address'}")
+        stored_hash = user_credentials[username].split(',')[0]  # Splitting to extract just the hash
+        if stored_hash != hashed_password:
+            response = {'type': 'login_response', 'status': 'failure', 'message': 'Incorrect password'}
+            logging.warning(f"Login attempt denied for {username}: Incorrect password.")
+        else:
+            clients[client_socket]["username"] = username  # Assuming this part is correctly managed elsewhere
+            response = {'type': 'login_response', 'status': 'success', 'message': 'Login successful'}
+            logging.info(f"Login successful for {username}")
 
     try:
         client_socket.send(pickle.dumps(response))
-        update_client_list_display()  # Update display after login
+        update_client_list_display()
     except Exception as e:
         logging.error(f"Error sending response to {username}: {e}")
-        remove_client(client_socket)
 
 if __name__ == "__main__":
     try:
