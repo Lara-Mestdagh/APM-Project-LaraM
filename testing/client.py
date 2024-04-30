@@ -48,8 +48,8 @@ def attempt_reconnect():
     logging.error("Failed to connect to the server. Check your network and try again.")
 
 def logout():
-    if client_handler.running:
-        client_handler.close_connection()
+    # if client_handler.running:
+    #     client_handler.close_connection()
     show_login()
 
 def show_dashboard():
@@ -81,6 +81,13 @@ def update_gui():
                 msgbox.showwarning("Login Failed", data if data else "Unknown error")
             elif command == "connection_error":
                 show_retry_connection()
+            elif command == "connection_success":
+                print("Connection to server successful.")
+            elif command == "connection_closed":
+                print("Connection to server closed.")
+            # if the command is empty, it is a message from the server
+            elif command == "message":
+                print("Message received from server: ", data)
             else:
                 logging.error(f"Unhandled command: {command}")
         except ValueError as e:

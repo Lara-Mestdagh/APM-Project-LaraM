@@ -46,8 +46,8 @@ class ClientHandler:
             logging.error("Received a response without a type specifier.")
             return
         
-        print("Handle_response - clienthandler.py")
-        print(response)
+        # rint("Handle_response - clienthandler.py")
+        # print(response)
 
         if response['type'] == 'login_response':
             status = response.get('status', 'failure')

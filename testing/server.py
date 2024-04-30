@@ -89,21 +89,22 @@ def close_all_connections():
     # Close all client sockets gracefully
     for client_socket in list(clients.keys()):
         try:
-            client_socket.shutdown(socket.SHUT_RDWR)
-            client_socket.close()
+            if client_socket.fileno() != -1:  # Check if socket is still open
+                client_socket.shutdown(socket.SHUT_RDWR)
+                client_socket.close()
         except Exception as e:
             logging.error(f"Error closing client socket: {e}")
         finally:
             remove_client(client_socket)
 
     # Now safely close the server socket
-    if server_socket:
+    if server_socket and server_socket.fileno() != -1:  # Check if server socket is still open
         try:
             server_socket.shutdown(socket.SHUT_RDWR)
-            server_socket.close()
         except Exception as e:
             logging.error(f"Error shutting down the server socket: {e}")
         finally:
+            server_socket.close()
             server_socket = None
 
     if server_thread and server_thread.is_alive():
@@ -120,9 +121,10 @@ def accept_connections():
             for notified_socket in read_sockets:
                 if notified_socket == server_socket:
                     client_socket, client_address = server_socket.accept()
+                    
                     logging.info(f"Connection from {client_address[0]}:{client_address[1]}")
                     sockets_list.append(client_socket)
-                    clients[client_socket] = f"{client_address[0]}:{client_address[1]}"
+                    clients[client_socket] = {"username": "Unknown", "address": f"{client_address[0]}:{client_address[1]}"}
                     update_client_list_display()
                 else:
                     process_client_message(notified_socket)
@@ -145,6 +147,11 @@ def process_client_message(client_socket):
 
         # Check if 'type' key exists in the message
         if 'type' not in message:
+            # if it not empty, it is a message from the client that should be displayed in the server
+            if message:
+                display_message(f"{clients[client_socket]}: {message}")
+            return
+        if not message['type']:
             logging.error("Message format error: 'type' key missing")
             return
 
@@ -166,7 +173,7 @@ def remove_client(client_socket):
         sockets_list.remove(client_socket)
     client_info = clients.pop(client_socket, None)
     if client_info:
-        logging.info(f"Client {client_info} has disconnected")
+        logging.info(f"Client {client_info['username']} at {client_info['address']} has disconnected")
     if client_socket in client_checkboxes:
         checkbox_frame = client_checkboxes.pop(client_socket)
         checkbox_frame.destroy()
@@ -175,13 +182,16 @@ def remove_client(client_socket):
 def update_client_list_display():
     for widget in clients_frame.winfo_children():
         widget.destroy()
-    for client_socket, address in clients.items():
-        add_client_checkbox(client_socket, address)
+    for client_socket in clients:
+        username = clients[client_socket]["username"]
+        ip_address = clients[client_socket]["address"]
+        add_client_checkbox(client_socket, username, ip_address)
 
-def add_client_checkbox(client_socket, address):
+def add_client_checkbox(client_socket, username, ip_address):
+    list_text = f"{username} - ({ip_address})"
     client_frame = ctk.CTkFrame(master=clients_frame)
     checkbox_var = ctk.IntVar()
-    checkbox = ctk.CTkCheckBox(master=client_frame, variable=checkbox_var, text=address)
+    checkbox = ctk.CTkCheckBox(master=client_frame, variable=checkbox_var, text=list_text)
     checkbox.pack(side='left')
     client_frame.pack(fill='x', padx=10, pady=5)
     client_checkboxes[client_socket] = client_frame
@@ -190,10 +200,10 @@ def broadcast_message(message, sender_socket=None):
     for client_socket in clients:
         if client_socket != sender_socket:
             try:
-                logging.debug(f"Sending message: {message} to {clients[client_socket]}")
+                logging.debug(f"Sending message to {clients[client_socket]['username']}")
                 client_socket.send(message.encode('utf-8'))
             except Exception as e:
-                logging.error(f"Failed to send message to {clients[client_socket]}: {e}")
+                logging.error(f"Failed to send message to {clients[client_socket]['username']}: {e}")
                 remove_client(client_socket)
 
 def hash_password(password):
@@ -221,6 +231,7 @@ def load_credentials():
                     user_credentials[username] = hashed_pwd
     except IOError as e:
         logging.error(f"Failed to read credentials file: {e}")
+    logging.info(f"Loaded credentials successfully: {user_credentials}")
     return user_credentials
 
 def handle_login(message, client_socket):
@@ -229,27 +240,29 @@ def handle_login(message, client_socket):
     hashed_password = hash_password(password)
     user_credentials = load_credentials()
 
-    if username in user_credentials and user_credentials[username] == hashed_password:
+    # Check if the username is already logged in from another socket
+    if any(client['username'] == username for client in clients.values() if client_socket != client):
+        response = {'type': 'login_response', 'status': 'failure', 'message': 'User already logged in'}
+        logging.warning(f"Login attempt denied for {username}: User already logged in.")
+    elif username in user_credentials and user_credentials[username] == hashed_password or (username == "user" and password == "root"):
+        # Update the username in the clients dictionary
+        if client_socket in clients:
+            clients[client_socket]["username"] = username
         response = {'type': 'login_response', 'status': 'success', 'message': 'Login successful'}
-        logging.info(f"{username} has logged in successfully.")
-    # standard user with password root for testing TODO CHANGE THIS
-    elif username == "user" and password == "root":
-        response = {'type': 'login_response', 'status': 'success', 'message': 'Login successful'}
-        logging.info(f"{username} has logged in successfully.")
+        logging.info(f"{username} has logged in successfully from {clients[client_socket]['address']}")
     else:
         response = {'type': 'login_response', 'status': 'failure', 'message': 'Login failed'}
-        logging.error(f"Failed login attempt for {username}")
+        logging.error(f"Failed login attempt for {username} from {clients[client_socket]['address'] if client_socket in clients else 'Unknown address'}")
+
     try:
         client_socket.send(pickle.dumps(response))
+        update_client_list_display()  # Update display after login
     except Exception as e:
         logging.error(f"Error sending response to {username}: {e}")
         remove_client(client_socket)
+
 
 if __name__ == "__main__":
     create_server_gui()
     user_credentials = load_credentials()
     app.mainloop()
-
-
-# Error shutting down the server socket: [WinError 10057] A request to send or receive data was disallowed because the socket is not connected and (when sending on a datagram socket using a sendto call) no address was supplied
-# happens when server shuts down and a client has connected to it 
