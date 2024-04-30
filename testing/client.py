@@ -5,137 +5,195 @@ import time
 import logging
 from clienthandler import ClientHandler
 
-# Setup logging configuration
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+class AppGUI:
+    def __init__(self, host, port):
+        # Initialize the GUI
+        self.host = host
+        self.port = port
+        self.message_queue = queue.Queue()
+        # Create a client handler instance and connect to the server
+        self.client_handler = ClientHandler(host, port, self.message_queue)
+        self.client_handler.connect()
+        
+        # Set up logging
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+        
+        self.app = ctk.CTk()
+        self.app.title("APM - Animal Crossing Villagers - Client")
+        self.app.geometry("600x800")
 
-HOST = 'localhost'
-PORT = 5000
-message_queue = queue.Queue()
+        # Create the frames
+        self.retry_connection_frame = ctk.CTkFrame(master=self.app)
+        self.login_frame = ctk.CTkFrame(master=self.app)
+        self.dashboard_frame = ctk.CTkFrame(master=self.app)
+        self.register_frame = ctk.CTkFrame(master=self.app)
+        
+        # Create the widgets
+        self.setup_frames()
+        self.show_login()       # Show the login frame by default if connection is successful
+        self.app.after(100, self.update_gui)        # Start the GUI update loop
+        self.app.mainloop()     # Start the main event loop
 
-app = ctk.CTk()
-app.title("Application")
-app.geometry("450x400")
+    def setup_frames(self):
+        # Set up the frames
+        self.setup_retry_connection_frame()
+        self.setup_login_frame()
+        self.setup_dashboard_frame()
+        self.setup_register_frame()
 
-def clear_window():
-    for widget in app.winfo_children():
-        widget.destroy()
+    def setup_retry_connection_frame(self):
+        self.retry_connection_frame.pack(fill="both", expand=True)
 
-def show_retry_connection():
-    clear_window()
-    title = ctk.CTkLabel(master=app, text="Connection Error")
-    title.pack(pady=10)
+        title = ctk.CTkLabel(master=self.retry_connection_frame, text="Connection Error")
+        title.pack(pady=10)
 
-    message = ctk.CTkLabel(master=app, text="Failed to connect to the server. Trying again...")
-    message.pack(pady=10)
+        message = ctk.CTkLabel(master=self.retry_connection_frame, text="Failed to connect to the server. Trying again...")
+        message.pack(pady=10)
 
-    retry_button = ctk.CTkButton(master=app, text="Retry Connection", command=attempt_reconnect)
-    retry_button.pack(pady=20)
+        self.progress = ctk.CTkProgressBar(master=self.retry_connection_frame)
+        self.progress.pack(pady=20)
 
-    back_button = ctk.CTkButton(master=app, text="Exit", command=app.quit)
-    back_button.pack(pady=10)
+        retry_button = ctk.CTkButton(master=self.retry_connection_frame, text="Retry Connection", command=self.attempt_reconnect)
+        retry_button.pack(pady=20)
 
-def attempt_reconnect():
-    logging.info("Attempting to reconnect to the server...")
-    for _ in range(3):  # Try to connect three times
-        try:
-            client_handler.connect_to_server()
-            if client_handler.running:
-                show_login()  # Or show_dashboard() if you want to go straight to the dashboard after reconnecting
-                return
-            time.sleep(1)  # Wait for a second before retrying
-        except Exception as e:
-            logging.error(f"Retry failed: {e}")
-    logging.error("Failed to connect to the server. Check your network and try again.")
+        back_button = ctk.CTkButton(master=self.retry_connection_frame, text="Exit", command=self.app.quit)
+        back_button.pack(pady=10)
 
-def logout():
-    if client_handler.running:
-        client_handler.close_connection()
-    show_login()
+    def setup_login_frame(self):
+        title = ctk.CTkLabel(master=self.login_frame, text="Login")
+        title.pack(pady=10)
 
-def show_dashboard():
-    clear_window()
-    title = ctk.CTkLabel(master=app, text="Dashboard", font=("Arial", 15, "bold"))
-    title.pack(pady=10)
+        self.username_entry = ctk.CTkEntry(master=self.login_frame, placeholder_text="Username")
+        self.username_entry.pack(pady=10)
+        self.username_entry.focus_set()
 
-    logout_button = ctk.CTkButton(master=app, text="Logout", command=logout)
-    logout_button.pack(pady=20)
+        self.password_entry = ctk.CTkEntry(master=self.login_frame, placeholder_text="Password", show="*")
+        self.password_entry.pack(pady=10)
 
-    message_input = ctk.CTkEntry(master=app)
-    message_input.pack(pady=10, fill="x")
+        login_button = ctk.CTkButton(master=self.login_frame, text="Login", command=self.login)
+        login_button.pack(pady=10)
 
-    message_display = ctk.CTkTextbox(master=app, state='disabled', height=10)
-    message_display.pack(pady=20, fill="both", expand=True)
+        register_button = ctk.CTkButton(master=self.login_frame, text="Register", command=self.show_register)
+        register_button.pack(pady=10)
 
-    send_button = ctk.CTkButton(master=app, text="Send Message", command=lambda: client_handler.send_message(message_input.get()))
-    send_button.pack(pady=10)
+        self.app.bind('<Return>', self.login)
 
-    print("Dashboard is now displayed.")
+    def setup_dashboard_frame(self):
+        title = ctk.CTkLabel(master=self.dashboard_frame, text="Dashboard", font=("Arial", 15, "bold"))
+        title.pack(pady=10)
 
-def update_gui():
-    while not message_queue.empty():
-        try:
-            command, data = message_queue.get_nowait()
+        logout_button = ctk.CTkButton(master=self.dashboard_frame, text="Logout", command=self.logout)
+        logout_button.pack(pady=20)
+
+        self.message_input = ctk.CTkEntry(master=self.dashboard_frame)
+        self.message_input.pack(pady=10, fill="x")
+
+        send_button = ctk.CTkButton(master=self.dashboard_frame, text="Send Message", command=self.send_message)
+        send_button.pack(pady=10)
+
+        self.message_display = ctk.CTkTextbox(master=self.dashboard_frame, state='disabled', height=10)
+        self.message_display.pack(pady=20, fill="both", expand=True)
+
+    def setup_register_frame(self):
+        title = ctk.CTkLabel(master=self.register_frame, text="Register")
+        title.pack(pady=10)
+
+        name_entry = ctk.CTkEntry(master=self.register_frame, placeholder_text="Name")
+        name_entry.pack(pady=10)
+
+        username_entry = ctk.CTkEntry(master=self.register_frame, placeholder_text="Username")
+        username_entry.pack(pady=10)
+
+        email_entry = ctk.CTkEntry(master=self.register_frame, placeholder_text="Email")
+        email_entry.pack(pady=10)
+
+        password_entry = ctk.CTkEntry(master=self.register_frame, placeholder_text="Password", show="*")
+        password_entry.pack(pady=10)
+
+        register_button = ctk.CTkButton(master=self.register_frame, text="Register", command=lambda: self.register(name_entry.get(), username_entry.get(), email_entry.get(), password_entry.get()))
+        register_button.pack(pady=10)
+
+        back_button = ctk.CTkButton(master=self.register_frame, text="Back", command=self.show_login)
+        back_button.pack(pady=10)
+
+    def show_retry_connection(self):
+        self.clear_window()
+        self.retry_connection_frame.pack(fill="both", expand=True)
+
+    def show_login(self):
+        self.clear_window()
+        self.login_frame.pack(fill="both", expand=True)
+        # Reset the entry fields to empty
+        self.username_entry.delete(0, 'end')
+        self.password_entry.delete(0, 'end')
+        self.username_entry.focus_set()  # Optionally set focus to the username entry
+
+
+    def show_dashboard(self):
+        self.clear_window()
+        self.dashboard_frame.pack(fill="both", expand=True)
+
+    def show_register(self):
+        self.clear_window()
+        self.register_frame.pack(fill="both", expand=True)
+
+    def clear_window(self):
+        self.retry_connection_frame.pack_forget()
+        self.login_frame.pack_forget()
+        self.dashboard_frame.pack_forget()
+        self.register_frame.pack_forget()
+
+    def update_gui(self):
+        # Process any messages in the message queue
+        while not self.message_queue.empty(): 
+            # Get the next message from the queue
+            command, data = self.message_queue.get_nowait()
+            print(f"Command: {command}, Data: {data}")
             if command == "show_dashboard":
-                show_dashboard()
+                self.show_dashboard()
             elif command == "login_failed":
                 msgbox.showwarning("Login Failed", data if data else "Unknown error")
             elif command == "connection_error":
-                show_retry_connection()
+                self.show_retry_connection()
+            elif command == "connection_success":
+                logging.info("Connection to the server was successful.")
+            elif command == "connection_closed":
+                msgbox.showwarning("Connection Closed", data if data else "Unknown reason")
+                self.show_retry_connection()
             else:
                 logging.error(f"Unhandled command: {command}")
-        except ValueError as e:
-            logging.error(f"Queue message unpacking error: {e}")
-        except Exception as e:
-            logging.error(f"General error processing GUI update: {e}")
-    app.after(100, update_gui)
+        self.app.after(100, self.update_gui)
 
+    def attempt_reconnect(self):
+        logging.info("Attempting to reconnect to the server...")
+        for i in range(2):  # Try to connect two times
+            self.progress.set(i * 50)  # Update progress bar with each attempt
+            try:
+                self.client_handler.connect()
+                if self.client_handler.running:
+                    self.progress.set(100)  # Set progress to full on success
+                    self.show_login()  # Go to login if connection is successful
+                    return
+                time.sleep(1)  # Wait for a second before retrying
+            except Exception as e:
+                logging.error(f"Retry failed: {e}")
+                self.progress.set(0)  # Reset progress on failure
+        self.show_retry_connection()  # Show the retry screen again if all retries fail
 
-def show_login():
-    clear_window()
-    title = ctk.CTkLabel(master=app, text="Login")
-    title.pack(pady=10)
+    def login(self, event=None):
+        username = self.username_entry.get()
+        password = self.password_entry.get()
+        self.client_handler.login(username, password)
 
-    username_entry = ctk.CTkEntry(master=app, placeholder_text="Username")
-    username_entry.pack(pady=10)
-    username_entry.focus_set()  # Set focus to the username entry
+    def send_message(self):
+        message = self.message_input.get()
+        self.client_handler.send_message(message)
 
-    password_entry = ctk.CTkEntry(master=app, placeholder_text="Password", show="*")
-    password_entry.pack(pady=10)
+    def logout(self):
+        if self.client_handler.running:
+            # Send a logout message to the server
+            self.client_handler.send_message({'type': 'logout', 'host': self.host})
+        self.show_login()
 
-    def on_enter_key(event):
-        client_handler.login(username_entry.get(), password_entry.get())  # Trigger login on Enter key
-    app.bind('<Return>', on_enter_key)  # Bind the Enter key to the login action
-
-    login_button = ctk.CTkButton(master=app, text="Login", command=lambda: client_handler.login(username_entry.get(), password_entry.get()))
-    login_button.pack(pady=10)
-
-    register_button = ctk.CTkButton(master=app, text="Register", command=show_register)
-    register_button.pack(pady=10)
-
-def show_register():
-    clear_window()
-    title = ctk.CTkLabel(master=app, text="Register")
-    title.pack(pady=10)
-
-    name_entry = ctk.CTkEntry(master=app, placeholder_text="Name")
-    name_entry.pack(pady=10)
-
-    username_entry = ctk.CTkEntry(master=app, placeholder_text="Username")
-    username_entry.pack(pady=10)
-
-    email_entry = ctk.CTkEntry(master=app, placeholder_text="Email")
-    email_entry.pack(pady=10)
-
-    password_entry = ctk.CTkEntry(master=app, placeholder_text="Password", show="*")
-    password_entry.pack(pady=10)
-
-    register_button = ctk.CTkButton(master=app, text="Register", command=lambda: client_handler.register(name_entry.get(), username_entry.get(), email_entry.get(), password_entry.get()))
-    register_button.pack(pady=10)
-
-    back_button = ctk.CTkButton(master=app, text="Back", command=show_login)
-    back_button.pack(pady=10)
-    
-client_handler = ClientHandler(HOST, PORT, message_queue)
-app.after(100, update_gui)
-show_login()
-app.mainloop()
+# Create the GUI
+app_gui = AppGUI('localhost', 5000)
