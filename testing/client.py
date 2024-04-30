@@ -36,23 +36,24 @@ def show_retry_connection():
 
 def attempt_reconnect():
     logging.info("Attempting to reconnect to the server...")
-    for _ in range(3):  # Try to connect three times
-        try:
-            client_handler.connect_to_server()
-            if client_handler.running:
-                show_login()  # Or show_dashboard() if you want to go straight to the dashboard after reconnecting
-                return
-            time.sleep(1)  # Wait for a second before retrying
-        except Exception as e:
-            logging.error(f"Retry failed: {e}")
+    try:
+        client_handler.connect_to_server()
+        if client_handler.running:
+            show_login() 
+            return
+    except Exception as e:
+        logging.error(f"Retry failed: {e}")
     logging.error("Failed to connect to the server. Check your network and try again.")
 
-def logout():
-    # if client_handler.running:
-    #     client_handler.close_connection()
-    show_login()
+def send_message_and_clear():
+    global message_input
+    message = message_input.get()  # Get the message from the input field
+    if message.strip():  # Ensure the message is not just empty spaces
+        client_handler.send_message(message)  # Send the message using the ClientHandler
+        message_input.delete(0, 'end')  # Clear the input field after sending the message
 
 def show_dashboard():
+    global message_display, message_input
     clear_window()
     title = ctk.CTkLabel(master=app, text="Dashboard", font=("Arial", 15, "bold"))
     title.pack(pady=10)
@@ -60,18 +61,17 @@ def show_dashboard():
     logout_button = ctk.CTkButton(master=app, text="Logout", command=logout)
     logout_button.pack(pady=20)
 
+    message_display = ctk.CTkTextbox(master=app, state='normal', height=10)
+    message_display.pack(pady=20, fill="both", expand=True)
+
     message_input = ctk.CTkEntry(master=app)
     message_input.pack(pady=10, fill="x")
 
-    message_display = ctk.CTkTextbox(master=app, state='disabled', height=10)
-    message_display.pack(pady=20, fill="both", expand=True)
-
-    send_button = ctk.CTkButton(master=app, text="Send Message", command=lambda: client_handler.send_message(message_input.get()))
+    send_button = ctk.CTkButton(master=app, text="Send Message", command=send_message_and_clear)
     send_button.pack(pady=10)
 
-    print("Dashboard is now displayed.")
-
 def update_gui():
+    global message_display
     while not message_queue.empty():
         try:
             command, data = message_queue.get_nowait()
@@ -87,7 +87,7 @@ def update_gui():
                 print("Connection to server closed.")
             # if the command is empty, it is a message from the server
             elif command == "message":
-                print("Message received from server: ", data)
+                show_message(f"server: {data}")
             else:
                 logging.error(f"Unhandled command: {command}")
         except ValueError as e:
@@ -96,6 +96,14 @@ def update_gui():
             logging.error(f"General error processing GUI update: {e}")
     app.after(100, update_gui)
 
+def logout():
+    client_handler.logout()
+    show_login()
+
+def show_message(message):
+    global message_display
+    message_display.insert('end', message + '\n')
+    message_display.see('end')
 
 def show_login():
     clear_window()

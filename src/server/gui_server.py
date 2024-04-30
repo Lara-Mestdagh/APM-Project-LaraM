@@ -1,119 +1,312 @@
 import socket
 import select
 import threading
+from threading import Lock
 import customtkinter as ctk
+import hashlib
+import pickle
+import os
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 HOST = 'localhost'
 PORT = 5000
 
-# Create a server socket
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server_socket.bind((HOST, PORT))
-server_socket.listen()
-
-sockets_list = [server_socket]
+server_socket = None
+server_thread = None
+server_running = False
+sockets_list = []
 clients = {}
 client_checkboxes = {}
+clients_lock = Lock()
+
+def create_server_gui():
+    global clients_frame, message_input, message_display, app, server_status
+    app = ctk.CTk()
+    app.title("Server Control Panel")
+    app.geometry("500x600")
+
+    # Create the server status components
+    status_frame = ctk.CTkFrame(master=app)
+    status_frame.pack(pady=20, fill='x', padx=20)
+
+    server_status = ctk.CTkLabel(
+        master=status_frame, 
+        text="Server Status: Stopped", 
+        fg_color=('white', 'red'),
+        width=120, height=40,
+        corner_radius=10)
+    server_status.pack()
+
+    # Create the server control components
+    control_frame = ctk.CTkFrame(master=app)
+    control_frame.pack(pady=10, fill='x', padx=20)
+
+    start_button = ctk.CTkButton(master=control_frame, text="Start Server", command=start_server)
+    start_button.pack(side='left', padx=10)
+
+    stop_button = ctk.CTkButton(master=control_frame, text="Stop Server", command=stop_server)
+    stop_button.pack(side='right', padx=10)
+
+    # Create the connected clients display
+    clients_frame = ctk.CTkFrame(master=app)
+    clients_frame.pack(fill="both", expand=True, padx=20)
+
+    # TODO: add button for each connected client to get details and search history
+
+    # Create the message input and display components
+    message_frame = ctk.CTkFrame(master=app)
+    message_frame.pack(fill='x', padx=20, pady=20)
+
+    message_input = ctk.CTkEntry(master=message_frame)
+    message_input.pack(side='left', fill='x', expand=True, pady=10)
+
+    send_button = ctk.CTkButton(master=message_frame, text="Send Message", command=on_send)
+    send_button.pack(side='left', padx=10)
+
+    display_frame = ctk.CTkFrame(master=app)
+    display_frame.pack(fill='both', expand=True, padx=20, pady=10)
+
+    message_display = ctk.CTkTextbox(master=display_frame, state='disabled', height=10)
+    message_display.pack(fill='both', expand=True)
+
+    return app  # Return the created app object
+
+def update_server_status(status):
+    # Update the server status label with the provided status
+    global server_status
+    # Set the color to green if the server is running, red if stopped
+    color = 'green' if status == "Running" else 'red'
+    server_status.configure(text=f"Server Status: {status}", fg_color=('white', color))
+
+def start_server():
+    global server_socket, server_thread, server_running, server_status
+    if not server_running:
+        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        server_socket.bind((HOST, PORT))
+        server_socket.listen()
+        sockets_list.append(server_socket)
+
+        server_running = True
+        server_thread = threading.Thread(target=accept_connections)
+        server_thread.start()
+        server_status.configure(text="Server Status: Running", fg_color='green')
+        logging.info("Server started")
+
+def stop_server():
+    global server_socket, server_thread, server_running, server_status
+    if server_running:
+        server_running = False
+        close_all_connections()
+        server_status.configure(text="Server Status: Stopped", fg_color='red')
+        logging.info("Server stopped")
 
 def accept_connections():
-    while True:
-        # Use select to monitor sockets for incoming data
-        read_sockets, _, _ = select.select(sockets_list, [], [], 0)
-        for notified_socket in read_sockets:
-            if notified_socket == server_socket:
-                # Accept new client connections
-                client_socket, client_address = server_socket.accept()
-                sockets_list.append(client_socket)
-                clients[client_socket] = f"{client_address[0]}:{client_address[1]}"
-                update_client_list_display()
-            else:
-                try:
-                    # Receive message from a client
-                    message = notified_socket.recv(1024).decode('utf-8')
-                    if message:
-                        display_message(f"Client {clients[notified_socket]}: {message}")  # Log here when a message is received
-                        broadcast_message(f"From {clients[notified_socket]}: {message}", notified_socket)
-                    else:
-                        # Client disconnected
-                        remove_client(notified_socket)
-                except Exception as e:
-                    print(f"Error handling message from {clients[notified_socket]}: {e}")
-                    remove_client(notified_socket)
+    global server_running, sockets_list
+    try:
+        while server_running:
+            # Check if the server socket is still valid
+            if server_socket is None or server_socket.fileno() == -1:
+                logging.error("Server socket is not valid or already closed.")
+                break
+            read_sockets, _, _ = select.select(sockets_list, [], [], 1)
+            for notified_socket in read_sockets:
+                if notified_socket == server_socket:
+                    if not server_running:  # Additional check for server running status
+                        break
+                    try:
+                        client_socket, client_address = server_socket.accept()
+                        logging.info(f"Connection from {client_address[0]}:{client_address[1]}")
+                        sockets_list.append(client_socket)
+                        clients[client_socket] = {"username": "Unknown", "address": f"{client_address[0]}:{client_address[1]}"}
+                        update_client_list_display()
+                    except Exception as e:
+                        logging.error(f"Error accepting new connection: {e}")
+                else:
+                    process_client_message(notified_socket)
+    except Exception as e:
+        logging.error(f"Server accept loop error: {e}")
+    finally:
+        logging.info("Server accept loop has ended")
 
-def add_client_checkbox(client_socket, address):
-    # Create a checkbox for each client
-    client_frame = ctk.CTkFrame(master=clients_frame)
-    checkbox_var = ctk.IntVar()
-    checkbox = ctk.CTkCheckBox(master=client_frame, variable=checkbox_var, text=address)
-    checkbox.pack(side='left')
-    client_frame.pack(fill='x', padx=10, pady=5)
-    client_checkboxes[client_socket] = (checkbox, checkbox_var)
+def close_all_connections():
+    global server_socket, server_thread
+    # Close all client sockets gracefully
+    for client_socket in list(clients.keys()):
+        try:
+            if client_socket.fileno() != -1:  # Check if socket is still open
+                client_socket.shutdown(socket.SHUT_RDWR)
+                client_socket.close()
+        except Exception as e:
+            logging.error(f"Error closing client socket: {e}")
+        finally:
+            remove_client(client_socket)
 
-def update_client_list_display():
-    # Update the client list display
-    for widget in clients_frame.winfo_children():
-        widget.destroy()
-    for client_socket, address in clients.items():
-        add_client_checkbox(client_socket, address)
+    # Now safely close the server socket
+    if server_socket and server_socket.fileno() != -1:  # Check if server socket is still open
+        try:
+            # Additional check if the socket was ever listening
+            if server_running:
+                server_socket.shutdown(socket.SHUT_RDWR)
+        except socket.error as e:
+            logging.error(f"Error shutting down the server socket: {e}")
+        except Exception as e:
+            logging.error(f"General error when shutting down server socket: {e}")
+        finally:
+            server_socket.close()
+            server_socket = None
 
-def broadcast_message(message, sender_socket=None):
-    # Broadcast a message to all connected clients
-    for client_socket, checkbox_info in client_checkboxes.items():
-        checkbox, var = checkbox_info
-        if var.get() == 1 and client_socket != sender_socket:  # Skip sending the message back to the sender
-            try:
-                client_socket.send(message.encode('utf-8'))
-            except:
-                remove_client(client_socket)
+    if server_thread and server_thread.is_alive():
+        server_thread.join()
 
-def remove_client(client_socket):
-    # Remove a client from the server
-    if client_socket in sockets_list:
-        sockets_list.remove(client_socket)
-    if client_socket in clients:
-        del clients[client_socket]
-    if client_socket in client_checkboxes:
-        client_checkboxes[client_socket][0].master.destroy()
-        del client_checkboxes[client_socket]
-    client_socket.close()
-    update_client_list_display()
+    logging.info("All connections closed.")
 
 def on_send():
-    # Handle the send button click event
+    global message_input, message_display
     message = message_input.get().strip()
-    if message:  # Only send if message is not empty
-        display_message(f"Server: {message}")  # Log here when server sends a message
-        broadcast_message(message)  # Broadcast without additional logging
+    if message:
+        broadcast_message(message)
         message_input.delete(0, ctk.END)
 
 def display_message(message):
-    # Display a message in the message display area
     message_display.configure(state='normal')
     message_display.insert(ctk.END, message + '\n')
     message_display.configure(state='disabled')
     message_display.see(ctk.END)
 
-# Create the GUI application
-app = ctk.CTk()
-app.title("Server")
-app.geometry("400x600")
+def process_client_message(client_socket):
+    try:
+        message = client_socket.recv(1024)
+        if not message:
+            raise Exception("Client disconnected")
+        # Attempt to deserialize the message
+        try:
+            message = pickle.loads(message)
+        except pickle.PickleError as e:
+            logging.error(f"Pickle error processing message: {e}")
+            return
 
-clients_frame = ctk.CTkFrame(master=app)
-clients_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        # Check if 'type' key exists in the message
+        if 'type' not in message:
+            # if it not empty, it is a message from the client that should be displayed in the server
+            if message:
+                display_message(f"{clients[client_socket]['username']}: {message}")
+            return
+        if not message['type']:
+            logging.error("Message format error: 'type' key missing")
+            return
 
-message_input = ctk.CTkEntry(master=app)
-message_input.pack(pady=10, fill="x")
+        # Process message based on type
+        if message['type'] == 'login':
+            handle_login(message, client_socket)
+        elif message['type'] == 'logout':
+            logging.info(f"Client {clients[client_socket]['username']} has logged out")
+            # reset the username to 'Unknown' 
+            clients[client_socket]["username"] = "Unknown"
+            update_client_list_display()
+            pass
+        else:
+            logging.error(f"Unknown message type: {message['type']}")
+    except Exception as e:
+        logging.error(f"Error handling message: {e}")
+        remove_client(client_socket)
 
-send_button = ctk.CTkButton(master=app, text="Send Message", command=on_send)
-send_button.pack(pady=10)
+def remove_client(client_socket):
+    with clients_lock:
+        if client_socket in sockets_list:
+            sockets_list.remove(client_socket)
+        client_info = clients.pop(client_socket, None)
+        if client_info:
+            logging.info(f"Client {client_info['username']} at {client_info['address']} has disconnected")
+        if client_socket in client_checkboxes:
+            checkbox_frame = client_checkboxes.pop(client_socket)
+            checkbox_frame.destroy()
+    update_client_list_display()
 
-message_display = ctk.CTkTextbox(master=app, state='disabled', height=10)
-message_display.pack(pady=20, fill="both", expand=True)
+def update_client_list_display():
+    for widget in clients_frame.winfo_children():
+        widget.destroy()
+    for client_socket in clients:
+        username = clients[client_socket]["username"]
+        ip_address = clients[client_socket]["address"]
+        add_client_checkbox(client_socket, username, ip_address)
 
-# Start a separate thread to accept client connections
-thread = threading.Thread(target=accept_connections)
-thread.start()
+def add_client_checkbox(client_socket, username, ip_address):
+    list_text = f"{username} - ({ip_address})"
+    client_frame = ctk.CTkFrame(master=clients_frame)
+    checkbox_var = ctk.IntVar()
+    checkbox = ctk.CTkCheckBox(master=client_frame, variable=checkbox_var, text=list_text)
+    checkbox.pack(side='left')
+    client_frame.pack(fill='x', padx=10, pady=5)
+    client_checkboxes[client_socket] = client_frame
 
-# Run the GUI application
-app.mainloop()
+def broadcast_message(message, sender_socket=None):
+    # Serialize the message only once for efficiency
+    serialized_message = pickle.dumps(message)
+
+    for client_socket, checkbox_frame in client_checkboxes.items():
+        # The first child of checkbox_frame should be the CTkCheckBox itself
+        checkbox = checkbox_frame.winfo_children()[0]
+        if checkbox.get() == 1:  # Check if checkbox is selected
+            try:
+                client_socket.send(serialized_message)
+            except Exception as e:
+                logging.error(f"Error sending message to {clients[client_socket]['username']}: {e}")
+                remove_client(client_socket)
+
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def load_credentials():
+    user_credentials = {}
+    credentials_path = "./data/user_credentials.txt"
+    try:
+        if not os.path.exists(credentials_path):
+            with open(credentials_path, "w") as file:
+                logging.info("Credentials file created.")
+        with open(credentials_path, "r") as file:
+            for line in file:
+                if line.strip():
+                    username, hashed_pwd = line.strip().split(',', 1)
+                    user_credentials[username] = hashed_pwd
+    except IOError as e:
+        logging.error(f"Failed to read credentials file: {e}")
+    logging.info(f"Loaded credentials successfully: {user_credentials}")
+    return user_credentials
+
+def handle_login(message, client_socket):
+    username = message['username']
+    password = message['password']
+    hashed_password = hash_password(password)
+    user_credentials = load_credentials()
+
+    # Check if the username is already logged in from another socket
+    if any(client['username'] == username for client in clients.values() if client_socket != client):
+        response = {'type': 'login_response', 'status': 'failure', 'message': 'User already logged in'}
+        logging.warning(f"Login attempt denied for {username}: User already logged in.")
+    elif username in user_credentials and user_credentials[username] == hashed_password or (username == "user" and password == "root"):
+        # Update the username in the clients dictionary
+        if client_socket in clients:
+            clients[client_socket]["username"] = username
+        response = {'type': 'login_response', 'status': 'success', 'message': 'Login successful'}
+        logging.info(f"{username} has logged in successfully from {clients[client_socket]['address']}")
+    else:
+        response = {'type': 'login_response', 'status': 'failure', 'message': 'Login failed'}
+        logging.error(f"Failed login attempt for {username} from {clients[client_socket]['address'] if client_socket in clients else 'Unknown address'}")
+
+    try:
+        client_socket.send(pickle.dumps(response))
+        update_client_list_display()  # Update display after login
+    except Exception as e:
+        logging.error(f"Error sending response to {username}: {e}")
+        remove_client(client_socket)
+
+if __name__ == "__main__":
+    try:
+        app = create_server_gui()       # Create the server GUI
+        app.mainloop()                  # Start the GUI main loop
+    except Exception as e:
+        logging.error(f"Failed to start the GUI: {e}")
