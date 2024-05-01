@@ -1,9 +1,7 @@
 TODO:
-- if server is not on, still start client with retry conenction screen?
-- login not going to dashboard with standard user
-- register only sometimes work
-- need error handling in the client gui
-- make a txt log of client actions?
+- server can ask for client details, button on online clients
+- server can ask for full credentials too with a button to get all client details -> open new window?
+- someway to get the server to be able to send warnings to client? pop up warning that is
 
 
 

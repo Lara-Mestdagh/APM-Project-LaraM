@@ -1,244 +1,164 @@
-import socket
-import select
-import threading
 import customtkinter as ctk
-import hashlib
-import pickle
-import os
+import tkinter.messagebox as msgbox
+import queue
+import time
+import logging
+
+from ..server.clienthandler import ClientHandler
+
+
+# Setup logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 HOST = 'localhost'
 PORT = 5000
+message_queue = queue.Queue()
 
-server_socket = None
-server_thread = None
-server_running = False
-sockets_list = []
-clients = {}
-client_checkboxes = {}
+app = ctk.CTk()
+app.title("Application")
+app.geometry("450x400")
 
-def create_server_gui():
-    global clients_frame, message_input, message_display, app, server_status
-    app = ctk.CTk()
-    app.title("Server Control")
-    app.geometry("450x600")
+def clear_window():
+    for widget in app.winfo_children():
+        widget.destroy()
 
-    server_status = ctk.CTkLabel(master=app, text="Server Status", fg_color='red', width=120, height=40)
-    server_status.pack(pady=20)
+def show_retry_connection():
+    clear_window()
+    title = ctk.CTkLabel(master=app, text="Connection Error")
+    title.pack(pady=10)
 
-    start_button = ctk.CTkButton(master=app, text="Start Server", command=start_server)
-    start_button.pack(pady=10)
+    message = ctk.CTkLabel(master=app, text="Failed to connect to the server. Trying again...")
+    message.pack(pady=10)
 
-    stop_button = ctk.CTkButton(master=app, text="Stop Server", command=stop_server)
-    stop_button.pack(pady=10)
+    retry_button = ctk.CTkButton(master=app, text="Retry Connection", command=attempt_reconnect)
+    retry_button.pack(pady=20)
 
-    clients_frame = ctk.CTkFrame(master=app)
-    clients_frame.pack(fill="both", expand=True, padx=20, pady=20)
+    back_button = ctk.CTkButton(master=app, text="Exit", command=app.quit)
+    back_button.pack(pady=10)
+
+def attempt_reconnect():
+    logging.info("Attempting to reconnect to the server...")
+    try:
+        client_handler.connect_to_server()
+        if client_handler.running:
+            show_login() 
+            return
+    except Exception as e:
+        logging.error(f"Retry failed: {e}")
+    logging.error("Failed to connect to the server. Check your network and try again.")
+
+def send_message_and_clear():
+    global message_input
+    message = message_input.get()  # Get the message from the input field
+    if message.strip():  # Ensure the message is not just empty spaces
+        client_handler.send_message(message)  # Send the message using the ClientHandler
+        message_input.delete(0, 'end')  # Clear the input field after sending the message
+
+def show_dashboard():
+    global message_display, message_input, username
+    clear_window()
+    title = ctk.CTkLabel(master=app, text=f"Dashboard - {username}", font=("Arial", 16, "bold"))
+    title.pack(pady=10)
+
+    logout_button = ctk.CTkButton(master=app, text="Logout", command=logout)
+    logout_button.pack(pady=20)
+
+    message_display = ctk.CTkTextbox(master=app, state='normal', height=10)
+    message_display.pack(pady=20, fill="both", expand=True)
 
     message_input = ctk.CTkEntry(master=app)
     message_input.pack(pady=10, fill="x")
 
-    send_button = ctk.CTkButton(master=app, text="Send Message", command=on_send)
+    send_button = ctk.CTkButton(master=app, text="Send Message", command=send_message_and_clear)
     send_button.pack(pady=10)
 
-    message_display = ctk.CTkTextbox(master=app, state='disabled', height=10)
-    message_display.pack(pady=20, fill="both", expand=True)
-
-def on_send():
-    global message_input, message_display
-    message = message_input.get().strip()
-    if message:
-        display_message(f"Server: {message}")
-        broadcast_message(message)
-        message_input.delete(0, ctk.END)
-
-def display_message(message):
-    message_display.configure(state='normal')
-    message_display.insert(ctk.END, message + '\n')
-    message_display.configure(state='disabled')
-    message_display.see(ctk.END)
-
-# Start server operation
-def start_server():
-    global server_socket, server_thread, server_running, server_status
-    if not server_running:
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server_socket.bind((HOST, PORT))
-        server_socket.listen()
-        sockets_list.append(server_socket)
-
-        server_running = True
-        server_thread = threading.Thread(target=accept_connections)
-        server_thread.start()
-        server_status.configure(fg_color='green')
-        print("Server started")
-
-def stop_server():
-    global server_socket, server_thread, server_running, server_status
-    if server_running:
-        server_running = False
-        if server_socket:
-            if server_socket.fileno() != -1:
-                try:
-                    server_socket.shutdown(socket.SHUT_RDWR)
-                    server_socket.close()
-                except Exception as e:
-                    print(f"Error shutting down the server socket: {e}")
-                finally:
-                    if server_socket in sockets_list:
-                        sockets_list.remove(server_socket)
-            server_socket = None
-        if server_thread and server_thread.is_alive():
-            server_thread.join()
-        server_status.configure(fg_color='red')
-        print("Server stopped")
-
-def accept_connections():
-    global server_running, sockets_list
-    while server_running:
+def update_gui():
+    global message_display, username
+    while not message_queue.empty():
         try:
-            read_sockets, _, _ = select.select(sockets_list, [], [], 1)
-            for notified_socket in read_sockets:
-                if notified_socket == server_socket:
-                    client_socket, client_address = server_socket.accept()
-                    sockets_list.append(client_socket)
-                    clients[client_socket] = f"{client_address[0]}:{client_address[1]}"
-                    update_client_list_display()
-                else:
-                    process_client_message(notified_socket)
-        except Exception as e:
-            if server_running:
-                print(f"Server accept loop error: {e}")
+            command, data = message_queue.get_nowait()
+            if command == "show_dashboard":
+                # get the username from the message
+                username = data.split()[-1]
+                show_dashboard()
+            elif command == "login_failed":
+                msgbox.showwarning("Login Failed", data if data else "Unknown error")
+            elif command == "connection_error":
+                show_retry_connection()
+            elif command == "connection_success":
+                print("Connection to server successful.")
+            elif command == "connection_closed":
+                print("Connection to server closed.")
+            elif command == "show_login":
+                show_login()
+            elif command == "login_failed":
+                logging.error(f"Login failed: {data}")
+            # if the command is empty, it is a message from the server
+            elif command == "message":
+                show_message(f"server: {data}")
             else:
-                print("Server shutting down.")
+                logging.error(f"Unhandled command: {command}")
+        except ValueError as e:
+            logging.error(f"Queue message unpacking error: {e}")
+        except Exception as e:
+            logging.error(f"General error processing GUI update: {e}")
+    app.after(100, update_gui)
 
-def process_client_message(client_socket):
-    try:
-        message = client_socket.recv(1024)
-        if message:
-            try:
-                message = pickle.loads(message)
-                if message['type'] == 'login':
-                    handle_login(message, client_socket)
-                # Additional message handling logic here
-            except pickle.PickleError as e:
-                print(f"Pickle error: {e}")
-            except KeyError:
-                print("Received malformed data.")
-        else:
-            raise Exception("Client disconnected")
-    except Exception as e:
-        print(f"Error handling message from {clients[client_socket]}: {e}")
-        remove_client(client_socket)
+def logout():
+    client_handler.logout()
+    show_login()
 
-def add_client_checkbox(client_socket, address):
-    client_frame = ctk.CTkFrame(master=clients_frame)
-    checkbox_var = ctk.IntVar()
-    checkbox = ctk.CTkCheckBox(master=client_frame, variable=checkbox_var, text=address)
-    checkbox.pack(side='left')
-    client_frame.pack(fill='x', padx=10, pady=5)
-    client_checkboxes[client_socket] = (checkbox, checkbox_var)
+def show_message(message):
+    global message_display
+    message_display.insert('end', message + '\n')
+    message_display.see('end')
 
-def remove_client(client_socket):
-    if client_socket in sockets_list:
-        sockets_list.remove(client_socket)
-    if client_socket in clients:
-        print(f"Client {clients[client_socket]} has disconnected")
-        del clients[client_socket]
-    if client_socket in client_checkboxes:
-        # Retrieve the checkbox and var, but check for None before using them
-        checkbox, var = client_checkboxes.pop(client_socket, (None, None))
-        if checkbox and checkbox[0] and checkbox[0].master:
-            app.after(0, checkbox[0].master.destroy)
-    try:
-        client_socket.close()
-    except Exception as e:
-        print(f"Error closing client socket: {e}")
-    update_client_list_display()
+def show_login():
+    clear_window()
+    title = ctk.CTkLabel(master=app, text="Login")
+    title.pack(pady=10)
 
-def update_client_list_display():
-    try:
-        for widget in clients_frame.winfo_children():
-            widget.destroy()
-        for client_socket, address in clients.items():
-            try:
-                add_client_checkbox(client_socket, address)
-            except Exception as e:
-                print(f"Error updating client list display for {address}: {e}")
-    except Exception as e:
-        print(f"Error during updating client list display: {e}")
+    username_entry = ctk.CTkEntry(master=app, placeholder_text="Username")
+    username_entry.pack(pady=10)
+    username_entry.focus_set()  # Set focus to the username entry
 
+    password_entry = ctk.CTkEntry(master=app, placeholder_text="Password", show="*")
+    password_entry.pack(pady=10)
 
-def broadcast_message(message, sender_socket=None):
-    for client_socket, checkbox_info in client_checkboxes.items():
-        checkbox, var = checkbox_info
-        if var.get() == 1 and client_socket != sender_socket:
-            try:
-                client_socket.send(message.encode('utf-8'))
-            except:
-                remove_client(client_socket)
+    def on_enter_key(event):
+        client_handler.login(username_entry.get(), password_entry.get())  # Trigger login on Enter key
+    app.bind('<Return>', on_enter_key)  # Bind the Enter key to the login action
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+    login_button = ctk.CTkButton(master=app, text="Login", command=lambda: client_handler.login(username_entry.get(), password_entry.get()))
+    login_button.pack(pady=10)
 
-def save_credentials(username, hashed_password):
-    credentials_path = "user_credentials.txt"
-    with open(credentials_path, "a") as file:
-        file.write(f"{username},{hashed_password}\n")
+    register_button = ctk.CTkButton(master=app, text="Register", command=show_register)
+    register_button.pack(pady=10)
 
-def load_credentials():
-    user_credentials = {}
-    credentials_path = "./data/user_credentials.txt"
-    if not os.path.exists(credentials_path):
-        with open(credentials_path, "w") as file:
-            print("Credentials file created.")
-    with open(credentials_path, "r") as file:
-        for line in file:
-            if line.strip():
-                username, hashed_pwd = line.strip().split(',', 1)
-                user_credentials[username] = hashed_pwd
-    return user_credentials
+def show_register():
+    clear_window()
+    title = ctk.CTkLabel(master=app, text="Register")
+    title.pack(pady=10)
 
-def handle_registration(message, client_socket):
-    parts = message.split(',')
-    if len(parts) == 5:
-        _, name, username, email, password = parts
-        if not all([name, username, email, password]):
-            client_socket.send("Registration failed: All fields are required".encode('utf-8'))
-            return
+    name_entry = ctk.CTkEntry(master=app, placeholder_text="Name")
+    name_entry.pack(pady=10)
 
-        hashed_password = hash_password(password)
-        if username not in user_credentials:
-            user_credentials[username] = hashed_password
-            save_credentials(username, hashed_password)
-            client_socket.send("Registration successful".encode('utf-8'))
-            display_message(f"New registration: {username} ({email})")
-        else:
-            client_socket.send("Username already taken".encode('utf-8'))
-    else:
-        client_socket.send("Registration failed: Incorrect message format".encode('utf-8'))
+    username_entry = ctk.CTkEntry(master=app, placeholder_text="Username")
+    username_entry.pack(pady=10)
 
-def handle_login(message, client_socket):
-    username = message['username']
-    password = message['password']
-    hashed_password = hash_password(password)
-    user_credentials = load_credentials()  # Ensure credentials are always up-to-date
+    email_entry = ctk.CTkEntry(master=app, placeholder_text="Email")
+    email_entry.pack(pady=10)
 
-    if username in user_credentials and user_credentials[username] == hashed_password:
-        response = {'type': 'login_response', 'message': 'Login successful'}
-        client_socket.send(pickle.dumps(response))
-        display_message(f"{username} has logged in successfully.")
-    # Temporary code to demonstrate the login process with standard user
-    elif username == "user" and password == "root":
-        response = {'type': 'login_response', 'message': 'Login successful'}
-        client_socket.send(pickle.dumps(response))
-        display_message(f"{username} has logged in successfully.")
-    else:
-        response = {'type': 'login_response', 'message': 'Login failed'}
-        client_socket.send(pickle.dumps(response))
-        display_message(f"Failed login attempt for {username}")
+    password_entry = ctk.CTkEntry(master=app, placeholder_text="Password", show="*")
+    password_entry.pack(pady=10)
 
-if __name__ == "__main__":
-    create_server_gui()
-    user_credentials = load_credentials()
-    app.mainloop()
+    register_button = ctk.CTkButton(master=app, text="Register", command=lambda: client_handler.register(name_entry.get(), username_entry.get(), email_entry.get(), password_entry.get()))
+    register_button.pack(pady=10)
+
+    back_button = ctk.CTkButton(master=app, text="Back", command=show_login)
+    back_button.pack(pady=10)
+    
+client_handler = ClientHandler(HOST, PORT, message_queue)
+app.after(100, update_gui)
+show_login()
+app.mainloop()
