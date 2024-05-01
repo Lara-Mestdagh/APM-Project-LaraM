@@ -115,13 +115,29 @@ def handle_data_parameters(data):
     # above is a print of the data parameters to know the structure of the data
     # 
 
-
+    # TODO: check later if still needed
 
     logging.info("Handling data parameters")
 
 
+def handle_graph_data(graph_data):
+    print("EEEEEEEEEEEEEEEEEEEE")
+    print(graph_data)
+    # below is the print of the graph data to know the structure of the data
+    # Gender
+    # Male      204
+    # Female    187
+    # Name: count, dtype: int64
+    # Get the type of data the graph is displaying for the title
+    data_type = graph_data.index.name
+    # Create a bar plot of the data
+    graph_data.plot(kind='barh', color=['blue'])  # Switched to 'barh' for horizontal bar plot
+    plt.title(f'Visual Representation of Villager by {data_type}')
+    plt.xlabel("Number of Villagers")
+    plt.ylabel(data_type)
+    plt.show()
+
 def handle_request1():
-    logging.info(f"handle_request1 called with dropdown value: {request1_dropdown.get()}")
     # get the selected value from the dropdown
     data_type = request1_dropdown.get()
     # send the request to the clienthandler
@@ -158,8 +174,12 @@ def update_gui():
                 print(data)
             elif command == "graph_data":
                 print("Graph data received")
+                print("OOOOOOOOOOO")
                 # add a function to handle the graph data
                 print(data)
+            elif command == "display_graph":
+                print("Display graph")
+                handle_graph_data(data)                
             # if the command is empty, it is a message from the server
             elif command == "message":
                 show_message(f"server: {data}")

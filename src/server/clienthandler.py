@@ -29,9 +29,11 @@ class ClientHandler:
                 self.handle_disconnection("Failed to send message")
 
     def receive_messages(self):
+        buffer_size = 4096  # Set buffer size to 4 KB, adjust as needed
         while self.running:
             try:
-                response = self.client_socket.recv(1024)
+                # increased buffer size since we are getting larger data
+                response = self.client_socket.recv(buffer_size)
                 if not response:
                     raise ConnectionResetError("Server has closed the connection")
                 response_data = pickle.loads(response)
@@ -85,9 +87,8 @@ class ClientHandler:
             print("Received graph data from server.")
             # need to keep track of the columns
             graph_data = response.get("graph_data", "No data provided")
-
-            print(graph_data)
-            print("HERE MAKE THE GRAPH")
+            # send the graph data to the GUI to be displayed
+            self.message_queue.put(("display_graph", graph_data))
         else:
             self.handle_error(response)
 
