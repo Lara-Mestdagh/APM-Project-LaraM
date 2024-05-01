@@ -6,7 +6,15 @@ TODO:
 
 
 
+Zie demo networking 3
+multi-threaded server
+each client makes a clienthandler object
 
+zie demo networking 5
+Zorg er voor dat alle threads correct kunnen afgesloten worden
+• Zorgt het sluiten van de serversocket ervoor dat geconnecteerde
+cliënts niet meer kunnen communiceren?
+• Event mbt sluiten van de GUI verzorgen zowel langs cliënt/server.
 
 
 
