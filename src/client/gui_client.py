@@ -93,6 +93,10 @@ def update_gui():
                 show_login()
             elif command == "login_failed":
                 logging.error(f"Login failed: {data}")
+            # get parameters from the message
+            elif command == "data_parameters":
+                print("Data parameters received")
+                print(data)
             # if the command is empty, it is a message from the server
             elif command == "message":
                 show_message(f"server: {data}")

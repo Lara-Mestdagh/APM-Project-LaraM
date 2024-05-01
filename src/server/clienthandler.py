@@ -71,6 +71,10 @@ class ClientHandler:
             else:
                 print("Registration failed, showing error message.")
                 self.message_queue.put(("login_failed", message))
+        elif response['type'] == 'data_parameters':
+            print("Received data parameters from server.")
+            columns = response.get('columns', [])
+            self.message_queue.put(("data_parameters", columns))
         else:
             self.handle_error(response)
 
@@ -107,6 +111,8 @@ class ClientHandler:
             thread = threading.Thread(target=self.receive_messages, daemon=True)
             thread.start()
             self.message_queue.put(("connection_success", "Connected to server"))
+            # request the data parameters from the server
+            self.request_data()
         except socket.error as e:
             self.running = False
             logging.error(f"Failed to connect to server: {e}")
@@ -122,4 +128,4 @@ class ClientHandler:
         self.send_message({'type': 'logout'})
 
     def request_data(self):
-        self.send_message({'type': 'request_data'})
+        self.send_message({'type': 'request_data_parameters'})
