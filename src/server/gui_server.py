@@ -308,11 +308,11 @@ def process_client_message(client_socket):
             logging.info(f"Client {clients[client_socket]["username"]} has requested to register")
             handle_register(message, client_socket)
         elif message["type"] == "request_bar_graph1":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph")
+            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 1")
             data_type = message["data_type"]
             handle_request_bar_graph1(data_type, client_socket)
         elif message["type"] == "request_bar_graph2":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph")
+            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 2")
             data_type = message["data_type"]
             handle_request_bar_graph2(data_type, client_socket)
         else:
@@ -332,7 +332,6 @@ def handle_request_bar_graph1(data_type, client_socket):
             # get the unique values and their counts
             graph_data = dataset[data_type].value_counts()
             response = {"type": "received_graph1", "status": "success", "graph_data": graph_data}
-            logging.info("Graph data sent successfully")
         except Exception as e:
             response = {"type": "received_graph1", "status": "failure", "message": f"Error processing graph data: {e}"}
             logging.error(f"Error processing graph data: {e}")
@@ -354,7 +353,6 @@ def handle_request_bar_graph2(data_type, client_socket):
             # Count the number of occurrences of each month
             graph_data = dataset['Month'].value_counts().sort_index()            
             response = {"type": "received_graph2", "status": "success", "graph_data": graph_data}
-            logging.info("Graph data sent successfully")
         except Exception as e:
             response = {"type": "received_graph2", "status": "failure", "message": f"Error processing graph data: {e}"}
             logging.error(f"Error processing graph data: {e}")

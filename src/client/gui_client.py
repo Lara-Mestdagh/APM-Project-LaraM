@@ -4,8 +4,10 @@ import queue
 import time
 import logging
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 
+from tkcalendar import Calendar, DateEntry
 from ..server.clienthandler import ClientHandler
 
 
@@ -57,9 +59,9 @@ def send_message_and_clear():
         message_input.delete(0, "end")  # Clear the input field after sending the message
 
 def show_dashboard():
-    global message_display, message_input, username, request1_dropdown
+    global message_display, message_input, username, request1_dropdown, request3_dropdown
     clear_window()
-    app.geometry("700x650")
+    app.geometry("1000x750")
     title = ctk.CTkLabel(master=app, text=f"Dashboard - {username}", font=("Arial", 16, "bold"))
     title.pack(pady=10)
 
@@ -67,9 +69,6 @@ def show_dashboard():
     logout_button.pack(pady=10)
 
     # GUI elements for requests
-    # - Search all villagers by filtering by race, personality, birthday, and hobby.
-    # - Graph showing all catchphrases by beginning letter, amount of words, and amount of letters.
-
     # frame for the requests
     requests_frame = ctk.CTkFrame(master=app)
     requests_frame.pack(pady=10, fill="both", expand=True)
@@ -83,23 +82,64 @@ def show_dashboard():
     request1_label = ctk.CTkLabel(master=request1_frame, text="Graph all villagers by:")
     request1_label.pack(side="left", padx=10)
 
-    request1_dropdown = ctk.CTkOptionMenu(master=request1_frame, values="Species Gender Personality Hobby".split())
+    request1_dropdown = ctk.CTkOptionMenu(master=request1_frame, values=["Species", "Gender", "Personality", "Hobby"])
     request1_dropdown.pack(side="left", padx=10) 
 
     request1_button = ctk.CTkButton(master=request1_frame, text="Graph", command=handle_request1)
-    request1_button.pack(side="left", padx=10)
+    request1_button.pack(side="right", padx=10)
+
+    # - Graph showing all catchphrases by beginning letter, amount of words, and amount of letters.
+    # request 3
+    request3_frame = ctk.CTkFrame(master=requests_frame)
+    request3_frame.pack(pady=10, fill="both", expand=True)
+
+    request3_label = ctk.CTkLabel(master=request3_frame, text="Graph showing all catchphrases by:")
+    request3_label.pack(side="left", padx=10)
+
+    request3_dropdown = ctk.CTkOptionMenu(master=request3_frame, values=["Starting letter", "Word count", "Letter count"])
+    request3_dropdown.pack(side="left", padx=10)
+
+    request3_button = ctk.CTkButton(master=request3_frame, text="Graph", command=handle_request3)
+    request3_button.pack(side="right", padx=10)
 
     # - Show the amount of birthdays per month.
     # request 2
     request2_frame = ctk.CTkFrame(master=requests_frame)
     request2_frame.pack(pady=10, fill="both", expand=True)
 
-    request2_label = ctk.CTkLabel(master=request2_frame, text="Show the amount of birthdays per month.")
+    request2_label = ctk.CTkLabel(master=request2_frame, text="Graph the amount of birthdays per month.")
     request2_label.pack(side="left", padx=10)
 
     request2_button = ctk.CTkButton(master=request2_frame, text="Graph", command=handle_request2)
-    request2_button.pack(side="left", padx=10)
+    request2_button.pack(side="right", padx=10)
 
+    # - Search all villagers by filtering by race, personality, birthday, and hobby.
+    # use a dropdown to select race, personality, and hobby, if left blank, show all villagers for that category
+    # use a date picker to select the birthday, if left blank, show all villagers
+    # request 4
+    request4_frame = ctk.CTkFrame(master=requests_frame)
+    request4_frame.pack(pady=10, fill="both", expand=True)
+
+    request4_label = ctk.CTkLabel(master=request4_frame, text="Search all villagers by:")
+    request4_label.pack(side="left", padx=10)
+
+    # using global variables to store the possible values for the columns
+    # species, personality, and hobby
+    request4_race = ctk.CTkOptionMenu(master=request4_frame, values=species)
+    request4_race.pack(side="left", padx=10)
+
+    # for birthday, we can use a date picker
+    request4_birthday = DateEntry(request4_frame, width=12, background='darkblue', foreground='white', borderwidth=2)
+    request4_birthday.pack(side="left", padx=10)
+
+    request4_personality = ctk.CTkOptionMenu(master=request4_frame, values=personality)
+    request4_personality.pack(side="left", padx=10)
+
+    request4_hobby = ctk.CTkOptionMenu(master=request4_frame, values=hobby)
+    request4_hobby.pack(side="left", padx=10)
+
+    request4_button = ctk.CTkButton(master=request4_frame, text="Search", command=handle_request4)
+    request4_button.pack(side="right", padx=10)
 
 
     message_input = ctk.CTkEntry(master=app)
@@ -112,10 +152,18 @@ def show_dashboard():
     message_display.pack(pady=20, fill="both", expand=True)
 
 def handle_data_parameters(data):
-    # TODO: check later if still needed
+    global species, personality, hobby
+    # print(data)
 
-    logging.info("Handling data parameters")
+    # get the possible values for the columns species, personality, and hobby
+    species = data[1].get("Species", [])
+    personality = data[1].get("Personality", [])
+    hobby = data[1].get("Hobby", [])
 
+    # prepend an empty string to the list of species, personality, and hobby
+    species = np.insert(species, 0, "")
+    personality = np.insert(personality, 0, "")
+    hobby = np.insert(hobby, 0, "")
 
 def show_bar_graph1(graph_data):
     # Get the type of data the graph is displaying for the title
@@ -153,6 +201,17 @@ def handle_request2():
     # client_handler.send_message({"type": "request_graph", "data_type": "Birthday"})
     client_handler.request_bar_graph2("Birthday")
     logging.info(f"Graph request sent, type Birthday")
+
+def handle_request3():
+    # get the selected value from the dropdown
+    data_type = request3_dropdown.get()
+    # send the request to the clienthandler
+    # client_handler.send_message({"type": "request_graph", "data_type": data_type})
+    client_handler.request_bar_graph3(data_type)
+    logging.info(f"Graph request sent, type {data_type}")
+
+def handle_request4():
+    print("Request 4")
 
 def update_gui():
     global message_display, username

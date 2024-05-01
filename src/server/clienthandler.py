@@ -154,3 +154,8 @@ class ClientHandler:
 
     def request_bar_graph2(self, data_type):
         self.send_message({"type": "request_bar_graph2", "data_type": data_type})
+
+    def request_bar_graph3(self, data_type):
+        # self.send_message({"type": "request_line_graph3", "data_type": data_type})
+        print("Requesting bar graph 3")
+        print("VVVVVVVVVVVVVVVVVVVVVV")
