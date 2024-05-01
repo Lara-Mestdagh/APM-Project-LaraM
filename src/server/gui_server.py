@@ -11,6 +11,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import math
 
+from datasetpre import Dataset
+
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -113,7 +115,15 @@ def start_server():
         server_thread.start()
         server_status.configure(text="Server Status: Running", fg_color="green")
         # Load the dataset when the server starts
-        dataset = read_dataset()
+        preprocessor = Dataset("./data/Animal_Crossing_Villagers.csv")
+        # log the dataset before preprocessing
+        logging.info(f"Dataset before preprocessing: {preprocessor.dataset.head().describe()}")
+        dataset = preprocessor.preprocess_data()
+        # log the dataset after preprocessing
+        logging.info(f"Dataset after preprocessing: {preprocessor.dataset.head().describe()}")
+        # log the species and personality heatmap
+        preprocessor.species_personality_heatmap()
+        # dataset = read_dataset()
 
         logging.info("Server started")
 
