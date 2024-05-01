@@ -2,6 +2,7 @@ import customtkinter as ctk
 import tkinter.messagebox as msgbox
 import queue
 import time
+import datetime
 import logging
 import pandas as pd
 import numpy as np
@@ -215,27 +216,38 @@ def show_village_results(results):
     table_result_window.title("Search Results")
     table_result_window.geometry("800x400")
 
-    # Use a frame to contain the table labels
-    table_frame = ctk.CTkFrame(master=table_result_window)
-    table_frame.pack(fill="both", expand=True, padx=10, pady=10)
+    # Create a scrollable frame using CTkScrollableFrame
+    scrollable_frame = ctk.CTkScrollableFrame(master=table_result_window)
+    scrollable_frame.pack(fill="both", expand=True, padx=10, pady=10)
 
     # Create header labels
     headers = ["Name", "Species", "Gender", "Personality", "Hobby", "Birthday", "Catchphrase", "Unique Entry ID"]
     for i, header in enumerate(headers):
-        header_label = ctk.CTkLabel(master=table_frame, text=header)
+        header_label = ctk.CTkLabel(master=scrollable_frame, text=header)
         header_label.grid(row=0, column=i, sticky='ew', padx=5, pady=5)
 
-    # quick check if the results are empty
+    # Quick check if the results are empty
     if not results:
-        no_results_label = ctk.CTkLabel(master=table_frame, text="No results found.")
+        no_results_label = ctk.CTkLabel(master=scrollable_frame, text="No results found.")
         no_results_label.grid(row=1, column=0, columnspan=len(headers), sticky='ew', padx=5, pady=5)
         return
-    
+
     # Populate the table with data
     for row_index, entry in enumerate(results, start=1):
         for col_index, key in enumerate(headers):
             value = entry.get(key, "N/A")  # Handle missing keys gracefully
-            cell_label = ctk.CTkLabel(master=table_frame, text=value)
+            if key == "Birthday" and value != "N/A":  # Check if the key is 'Birthday' and value is not "N/A"
+                if isinstance(value, pd.Timestamp):  # Check if the value is a Timestamp
+                    value = value.strftime("%d-%B")  # Format the date to 'dd-mmmm'
+                else:
+                    try:
+                        # Attempt to parse and format if not a Timestamp but is a string
+                        date_obj = datetime.datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+                        value = date_obj.strftime("%d-%B")  # Format the date to 'dd-mmmm'
+                    except ValueError:
+                        value = "Invalid date"  # Handle cases where the date format is wrong
+
+            cell_label = ctk.CTkLabel(master=scrollable_frame, text=value)
             cell_label.grid(row=row_index, column=col_index, sticky='ew', padx=5, pady=5)
 
     # Button to close the window
@@ -319,8 +331,6 @@ def update_gui():
             elif command == "display_search_results":
                 print("Display search villagers")
                 results = args[0] if args else {}
-                print("7777777777777777777777777777")
-                print(results)
                 show_village_results(results)
             elif command == "message":
                 show_message(f"server: {args[0] if args else 'No message'}")
