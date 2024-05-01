@@ -104,6 +104,7 @@ def start_server():
         logging.info("Server started")
 
 def read_dataset():
+    global dataset
     # Load the dataset from the file 
     try:
         dataset = pd.read_csv("./data/Animal_Crossing_Villagers.csv")
@@ -225,8 +226,9 @@ def process_client_message(client_socket):
             clients[client_socket]["username"] = "Unknown"
             update_client_list_display()
             pass
-        elif message['type'] == 'request_data':
-            logging.info(f"Client {clients[client_socket]['username']} has requested data")
+        elif message['type'] == 'request_data_parameters':
+            logging.info(f"Client {clients[client_socket]['username']} has requested data parameters")
+            handle_request_data_parameters(message, client_socket)
         elif message['type'] == 'register':
             logging.info(f"Client {clients[client_socket]['username']} has requested to register")
             handle_register(message, client_socket)
@@ -235,6 +237,33 @@ def process_client_message(client_socket):
     except Exception as e:
         logging.error(f"Error handling message: {e}")
         remove_client(client_socket)
+
+
+
+
+def handle_request_data_parameters(message, client_socket):
+    global dataset
+    if dataset is None:
+        response = {'type': 'data_parameters', 'status': 'failure', 'message': 'Dataset not loaded'}
+        logging.warning("Data parameters request denied: Dataset not loaded")
+    else:
+        columns = dataset.columns.tolist()
+        response = {'type': 'data_parameters', 'status': 'success', 'columns': columns}
+        logging.info("Data parameters sent successfully")
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]['username']}: {e}")
+        remove_client(client_socket)
+
+
+
+
+
+
+
+
+
 
 def remove_client(client_socket):
     with clients_lock:
