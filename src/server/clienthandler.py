@@ -101,6 +101,11 @@ class ClientHandler:
             data_type = response.get("data_type", "No data type provided")
             # send the graph data to the GUI to be displayed
             self.message_queue.put(("display_graph3", graph_data, data_type))
+        elif response["type"] == "search_results":
+            print("Received search villagers data from server.")
+            search_results = response.get("search_results", "No data provided")
+            # send the search results to the GUI to be displayed
+            self.message_queue.put(("display_search_results", search_results))
         else:
             self.handle_error(response)
 
@@ -164,5 +169,7 @@ class ClientHandler:
 
     def request_bar_graph3(self, data_type):
         self.send_message({"type": "request_bar_graph3", "data_type": data_type})
-        # TODO delete after
-        print("VVVVVVVVVVVVVVVVVVVVVV")
+
+    def request_search_villagers(self, species, personality, hobby):
+        parameters = {"species": species, "personality": personality, "hobby": hobby}
+        self.send_message({"type": "request_search_villagers", "parameters": parameters})

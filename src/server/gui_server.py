@@ -329,6 +329,10 @@ def process_client_message(client_socket):
             logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 3")
             data_type = message["data_type"]
             handle_request_bar_graph3(data_type, client_socket)
+        elif message["type"] == "request_search_villagers":
+            logging.info(f"Client {clients[client_socket]["username"]} has requested to search villagers")
+            parameters = message["parameters"]
+            handle_request_search_villagers(parameters, client_socket)
         else:
             logging.error(f"Unknown message type: {message["type"]}")
     except Exception as e:
@@ -376,7 +380,6 @@ def handle_request_bar_graph2(data_type, client_socket):
     except Exception as e:
         logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
         
-
 def handle_request_bar_graph3(data_type, client_socket):
     # depending on data_type graph catchphrases by beginning letter, amount of words, and amount of letters.
     global dataset
@@ -410,6 +413,35 @@ def handle_request_bar_graph3(data_type, client_socket):
     except Exception as e:
         logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
 
+
+def handle_request_search_villagers(parameters, client_socket):
+    logging.info(f"Searching villagers with parameters: {parameters}")
+    global dataset
+    if dataset is None:
+        response = {"type": "search_results", "status": "failure", "message": "Dataset not loaded"}
+        logging.warning("Search request denied: Dataset not loaded")
+    else:
+        # using species, birthday, personality and hobby let's filter villagers
+        # if it is none, it means we don't want to filter by that attribute
+        species = parameters.get("species")
+        birthday = parameters.get("birthday")
+        personality = parameters.get("personality")
+        hobby = parameters.get("hobby")
+        filtered_data = dataset
+        if species:
+            filtered_data = filtered_data[filtered_data['Species'] == species]
+        if birthday:
+            filtered_data = filtered_data[filtered_data['Birthday'].dt.strftime('%b') == birthday]
+        if personality:
+            filtered_data = filtered_data[filtered_data['Personality'] == personality]
+        if hobby:
+            filtered_data = filtered_data[filtered_data['Hobby'] == hobby]
+
+        response = {"type": "search_results", "status": "success", "search_results": filtered_data.to_dict(orient="records")}
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
 
 def handle_request_data_parameters(message, client_socket):
     global dataset
