@@ -8,9 +8,9 @@ from ..server.clienthandler import ClientHandler
 
 
 # Setup logging configuration
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-HOST = 'localhost'
+HOST = "localhost"
 PORT = 5000
 message_queue = queue.Queue()
 
@@ -52,7 +52,7 @@ def send_message_and_clear():
     message = message_input.get()  # Get the message from the input field
     if message.strip():  # Ensure the message is not just empty spaces
         client_handler.send_message(message)  # Send the message using the ClientHandler
-        message_input.delete(0, 'end')  # Clear the input field after sending the message
+        message_input.delete(0, "end")  # Clear the input field after sending the message
 
 def show_dashboard():
     global message_display, message_input, username
@@ -63,7 +63,7 @@ def show_dashboard():
     logout_button = ctk.CTkButton(master=app, text="Logout", command=logout)
     logout_button.pack(pady=20)
 
-    message_display = ctk.CTkTextbox(master=app, state='normal', height=10)
+    message_display = ctk.CTkTextbox(master=app, state="normal", height=10)
     message_display.pack(pady=20, fill="both", expand=True)
 
     message_input = ctk.CTkEntry(master=app)
@@ -114,8 +114,8 @@ def logout():
 
 def show_message(message):
     global message_display
-    message_display.insert('end', message + '\n')
-    message_display.see('end')
+    message_display.insert("end", message + "\n")
+    message_display.see("end")
 
 def show_login():
     clear_window()
@@ -131,7 +131,7 @@ def show_login():
 
     def on_enter_key(event):
         client_handler.login(username_entry.get(), password_entry.get())  # Trigger login on Enter key
-    app.bind('<Return>', on_enter_key)  # Bind the Enter key to the login action
+    app.bind("<Return>", on_enter_key)  # Bind the Enter key to the login action
 
     login_button = ctk.CTkButton(master=app, text="Login", command=lambda: client_handler.login(username_entry.get(), password_entry.get()))
     login_button.pack(pady=10)

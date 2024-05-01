@@ -1,4 +1,15 @@
 TODO:
+Basic Interface Enhancements:
+Implement the buttons for requesting client details. This can be a simple form or dialog box that opens when you select a client from the logged-in list.
+Setup pop-up notifications on the client side that can display messages or warnings sent from the server.
+Logging and Monitoring:
+Enhance the server's logging window to include more detailed logs (e.g., timestamped entries, type of request, client ID).
+Implement a feature to view each client's search options history in a more organized manner, possibly with filters for date, search type, etc.
+
+
+
+
+
 - server can ask for client details, button on online clients
 - server can ask for full credentials too with a button to get all client details -> open new window?
 - someway to get the server to be able to send warnings to client? pop up warning that is

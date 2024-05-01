@@ -4,7 +4,7 @@ import pickle
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 class ClientHandler:
     def __init__(self, host, port, message_queue):
@@ -16,7 +16,7 @@ class ClientHandler:
         self.connect_to_server()
 
     def send_message(self, data):
-        # don't send empty messages
+        # don"t send empty messages
         if not data:
             return
         if self.running and self.client_socket:
@@ -45,7 +45,7 @@ class ClientHandler:
                 break
 
     def handle_response(self, response):
-        if 'type' not in response:
+        if "type" not in response:
             #if not type is is a message from the server
             self.handle_message(response)
             return
@@ -53,34 +53,34 @@ class ClientHandler:
         # rint("Handle_response - clienthandler.py")
         # print(response)
 
-        if response['type'] == 'login_response':
-            status = response.get('status', 'failure')
-            message = response.get('message', 'No message provided')
-            if status == 'success':
+        if response["type"] == "login_response":
+            status = response.get("status", "failure")
+            message = response.get("message", "No message provided")
+            if status == "success":
                 print("Login successful, updating GUI to show dashboard.")
                 self.message_queue.put(("show_dashboard", message))  # Ensure second value is None if no additional data
             else:
                 print("Login failed, showing error message.")
                 self.message_queue.put(("login_failed", message))
-        elif response['type'] == 'register_response':
-            status = response.get('status', 'failure')
-            message = response.get('message', 'No message provided')
-            if status == 'success':
+        elif response["type"] == "register_response":
+            status = response.get("status", "failure")
+            message = response.get("message", "No message provided")
+            if status == "success":
                 print("Registration successful, updating GUI to show login.")
                 self.message_queue.put(("show_login", None))
             else:
                 print("Registration failed, showing error message.")
                 self.message_queue.put(("login_failed", message))
-        elif response['type'] == 'data_parameters':
+        elif response["type"] == "data_parameters":
             print("Received data parameters from server.")
-            columns = response.get('columns', [])
+            columns = response.get("columns", [])
             self.message_queue.put(("data_parameters", columns))
         else:
             self.handle_error(response)
 
     def handle_error(self, response):
-        logging.error(f"Error from server: {response['message']}")
-        self.message_queue.put(("error", response['message']))
+        logging.error(f"Error from server: {response["message"]}")
+        self.message_queue.put(("error", response["message"]))
         
     def handle_disconnection(self, reason="Unknown reason"):
         if self.running:
@@ -119,13 +119,13 @@ class ClientHandler:
             self.message_queue.put(("connection_error", "Failed to connect to server."))
 
     def login(self, username, password):
-        self.send_message({'type': 'login', 'username': username, 'password': password})
+        self.send_message({"type": "login", "username": username, "password": password})
 
     def register(self, name, username, email, password):
-        self.send_message({'type': 'register', 'name': name, 'username': username, 'email': email, 'password': password})
+        self.send_message({"type": "register", "name": name, "username": username, "email": email, "password": password})
 
     def logout(self):  
-        self.send_message({'type': 'logout'})
+        self.send_message({"type": "logout"})
 
     def request_data(self):
-        self.send_message({'type': 'request_data_parameters'})
+        self.send_message({"type": "request_data_parameters"})

@@ -13,9 +13,9 @@ import math
 
 
 # Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-HOST = 'localhost'
+HOST = "localhost"
 PORT = 5000
 
 server_socket = None
@@ -30,51 +30,59 @@ def create_server_gui():
     global clients_frame, message_input, message_display, app, server_status
     app = ctk.CTk()
     app.title("Server Control Panel")
-    app.geometry("500x600")
+    app.geometry("550x650")
 
     # Create the server status components
     status_frame = ctk.CTkFrame(master=app)
-    status_frame.pack(pady=20, fill='x', padx=20)
+    status_frame.pack(pady=20, fill="x", padx=20)
 
     server_status = ctk.CTkLabel(
         master=status_frame, 
         text="Server Status: Stopped", 
-        fg_color=('white', 'red'),
+        fg_color=("white", "red"),
         width=120, height=40,
         corner_radius=10)
     server_status.pack()
 
     # Create the server control components
     control_frame = ctk.CTkFrame(master=app)
-    control_frame.pack(pady=10, fill='x', padx=20)
+    control_frame.pack(pady=10, fill="x", padx=20)
 
     start_button = ctk.CTkButton(master=control_frame, text="Start Server", command=start_server)
-    start_button.pack(side='left', padx=10)
+    start_button.pack(side="left")
 
     stop_button = ctk.CTkButton(master=control_frame, text="Stop Server", command=stop_server)
-    stop_button.pack(side='right', padx=10)
+    stop_button.pack(side="right")
 
-    # Create the connected clients display
+    # Create the connected clients display and request details components
+
+    button_frame = ctk.CTkFrame(master=app)
+    button_frame.pack(fill="x", padx=20, pady=10)
+    
+    details_button = ctk.CTkButton(master=button_frame, text="Details", command=request_details)
+    details_button.pack(side="right")
+
+    history_button = ctk.CTkButton(master=button_frame, text="History", command=request_search_history)
+    history_button.pack(side="left")
+
     clients_frame = ctk.CTkFrame(master=app)
     clients_frame.pack(fill="both", expand=True, padx=20)
 
-    # TODO: add button for each connected client to get details and search history
-
     # Create the message input and display components
     message_frame = ctk.CTkFrame(master=app)
-    message_frame.pack(fill='x', padx=20, pady=20)
+    message_frame.pack(fill="x", padx=20, pady=20)
 
     message_input = ctk.CTkEntry(master=message_frame)
-    message_input.pack(side='left', fill='x', expand=True, pady=10)
+    message_input.pack(side="left", fill="x", expand=True, pady=10)
 
     send_button = ctk.CTkButton(master=message_frame, text="Send Message", command=on_send)
-    send_button.pack(side='left', padx=10)
+    send_button.pack(side="left", padx=10)
 
     display_frame = ctk.CTkFrame(master=app)
-    display_frame.pack(fill='both', expand=True, padx=20, pady=10)
+    display_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-    message_display = ctk.CTkTextbox(master=display_frame, state='disabled', height=10)
-    message_display.pack(fill='both', expand=True)
+    message_display = ctk.CTkTextbox(master=display_frame, state="disabled", height=10)
+    message_display.pack(fill="both", expand=True)
 
     return app  # Return the created app object
 
@@ -82,8 +90,8 @@ def update_server_status(status):
     # Update the server status label with the provided status
     global server_status
     # Set the color to green if the server is running, red if stopped
-    color = 'green' if status == "Running" else 'red'
-    server_status.configure(text=f"Server Status: {status}", fg_color=('white', color))
+    color = "green" if status == "Running" else "red"
+    server_status.configure(text=f"Server Status: {status}", fg_color=("white", color))
 
 def start_server():
     global server_socket, server_thread, server_running, server_status, dataset
@@ -97,7 +105,7 @@ def start_server():
         server_running = True
         server_thread = threading.Thread(target=accept_connections)
         server_thread.start()
-        server_status.configure(text="Server Status: Running", fg_color='green')
+        server_status.configure(text="Server Status: Running", fg_color="green")
         # Load the dataset when the server starts
         dataset = read_dataset()
 
@@ -119,7 +127,7 @@ def stop_server():
     if server_running:
         server_running = False
         close_all_connections()
-        server_status.configure(text="Server Status: Stopped", fg_color='red')
+        server_status.configure(text="Server Status: Stopped", fg_color="red")
         logging.info("Server stopped")
 
 def accept_connections():
@@ -182,6 +190,43 @@ def close_all_connections():
 
     logging.info("All connections closed.")
 
+def request_details():
+    user_credentials = load_credentials()
+    selected_clients = [client_socket for client_socket, checkbox_frame in client_checkboxes.items() if checkbox_frame.winfo_children()[0].get() == 1]
+
+    if len(selected_clients) == 0:
+        # Show all client credentials
+        for username in user_credentials:
+            try:
+                _, full_name, email = user_credentials[username].split(",", 2)  # Split into three parts, ignoring the username
+                logging.info(f"Details for {username}: Full Name: {full_name}, Email: {email}")
+            except ValueError:
+                logging.warning(f"Data format error for {username}: {user_credentials[username]}")
+    else:
+        # Show details for selected clients
+        for client_socket in selected_clients:
+            username = clients[client_socket]["username"]
+            if username in user_credentials:
+                try:
+                    _, full_name, email = user_credentials[username].split(",", 2)  # Ignore the hashed password
+                    logging.info(f"Details for {username}: Full Name: {full_name}, Email: {email}")
+                except ValueError:
+                    logging.warning(f"Data format error for {username}: {user_credentials[username]}")
+            else:
+                logging.warning(f"No details found for {username}")
+
+def request_search_history():
+    # for now log if the request was made for all clients or selected clients
+    selected_clients = [client_socket for client_socket, checkbox_frame in client_checkboxes.items() if checkbox_frame.winfo_children()[0].get() == 1]
+
+    if not selected_clients:
+        logging.info("Requesting search history for all clients")
+    else:
+        logging.info(f"Requesting search history for {len(selected_clients)} clients")
+        for client_socket in selected_clients:
+            username = clients[client_socket]["username"]
+            logging.info(f"Requesting search history for {username}")
+
 def on_send():
     global message_input, message_display
     message = message_input.get().strip()
@@ -190,9 +235,9 @@ def on_send():
         message_input.delete(0, ctk.END)
 
 def display_message(message):
-    message_display.configure(state='normal')
-    message_display.insert(ctk.END, message + '\n')
-    message_display.configure(state='disabled')
+    message_display.configure(state="normal")
+    message_display.insert(ctk.END, message + "\n")
+    message_display.configure(state="disabled")
     message_display.see(ctk.END)
 
 def process_client_message(client_socket):
@@ -207,63 +252,51 @@ def process_client_message(client_socket):
             logging.error(f"Pickle error processing message: {e}")
             return
 
-        # Check if 'type' key exists in the message
-        if 'type' not in message:
+        # Check if "type" key exists in the message
+        if "type" not in message:
             # if it not empty, it is a message from the client that should be displayed in the server
             if message:
-                display_message(f"{clients[client_socket]['username']}: {message}")
+                display_message(f"{clients[client_socket]["username"]}: {message}")
             return
-        if not message['type']:
-            logging.error("Message format error: 'type' key missing")
+        if not message["type"]:
+            logging.error("Message format error: type key missing")
             return
 
         # Process message based on type
-        if message['type'] == 'login':
+        if message["type"] == "login":
             handle_login(message, client_socket)
-        elif message['type'] == 'logout':
-            logging.info(f"Client {clients[client_socket]['username']} has logged out")
-            # reset the username to 'Unknown' 
+        elif message["type"] == "logout":
+            logging.info(f"Client {clients[client_socket]["username"]} has logged out")
+            # reset the username to "Unknown" 
             clients[client_socket]["username"] = "Unknown"
             update_client_list_display()
             pass
-        elif message['type'] == 'request_data_parameters':
-            logging.info(f"Client {clients[client_socket]['username']} has requested data parameters")
+        elif message["type"] == "request_data_parameters":
+            logging.info(f"Client {clients[client_socket]["username"]} has requested data parameters")
             handle_request_data_parameters(message, client_socket)
-        elif message['type'] == 'register':
-            logging.info(f"Client {clients[client_socket]['username']} has requested to register")
+        elif message["type"] == "register":
+            logging.info(f"Client {clients[client_socket]["username"]} has requested to register")
             handle_register(message, client_socket)
         else:
-            logging.error(f"Unknown message type: {message['type']}")
+            logging.error(f"Unknown message type: {message["type"]}")
     except Exception as e:
         logging.error(f"Error handling message: {e}")
         remove_client(client_socket)
 
-
-
-
 def handle_request_data_parameters(message, client_socket):
     global dataset
     if dataset is None:
-        response = {'type': 'data_parameters', 'status': 'failure', 'message': 'Dataset not loaded'}
+        response = {"type": "data_parameters", "status": "failure", "message": "Dataset not loaded"}
         logging.warning("Data parameters request denied: Dataset not loaded")
     else:
         columns = dataset.columns.tolist()
-        response = {'type': 'data_parameters', 'status': 'success', 'columns': columns}
+        response = {"type": "data_parameters", "status": "success", "columns": columns}
         logging.info("Data parameters sent successfully")
     try:
         client_socket.send(pickle.dumps(response))
     except Exception as e:
-        logging.error(f"Error sending response to {clients[client_socket]['username']}: {e}")
+        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
         remove_client(client_socket)
-
-
-
-
-
-
-
-
-
 
 def remove_client(client_socket):
     with clients_lock:
@@ -271,7 +304,7 @@ def remove_client(client_socket):
             sockets_list.remove(client_socket)
         client_info = clients.pop(client_socket, None)
         if client_info:
-            logging.info(f"Client {client_info['username']} at {client_info['address']} has disconnected")
+            logging.info(f"Client {client_info["username"]} at {client_info["address"]} has disconnected")
         if client_socket in client_checkboxes:
             checkbox_frame = client_checkboxes.pop(client_socket)
             checkbox_frame.destroy()
@@ -290,8 +323,8 @@ def add_client_checkbox(client_socket, username, ip_address):
     client_frame = ctk.CTkFrame(master=clients_frame)
     checkbox_var = ctk.IntVar()
     checkbox = ctk.CTkCheckBox(master=client_frame, variable=checkbox_var, text=list_text)
-    checkbox.pack(side='left')
-    client_frame.pack(fill='x', padx=10, pady=5)
+    checkbox.pack(side="left")
+    client_frame.pack(fill="x", padx=10, pady=5)
     client_checkboxes[client_socket] = client_frame
 
 def broadcast_message(message, sender_socket=None):
@@ -305,7 +338,7 @@ def broadcast_message(message, sender_socket=None):
             try:
                 client_socket.send(serialized_message)
             except Exception as e:
-                logging.error(f"Error sending message to {clients[client_socket]['username']}: {e}")
+                logging.error(f"Error sending message to {clients[client_socket]["username"]}: {e}")
                 remove_client(client_socket)
 
 def hash_password(password):
@@ -321,7 +354,7 @@ def load_credentials():
         with open(credentials_path, "r") as file:
             for line in file:
                 if line.strip():
-                    username, hashed_pwd = line.strip().split(',', 1)
+                    username, hashed_pwd = line.strip().split(",", 1)
                     user_credentials[username] = hashed_pwd
     except IOError as e:
         logging.error(f"Failed to read credentials file: {e}")
@@ -331,33 +364,33 @@ def load_credentials():
 def handle_register(message, client_socket):
     # here we will handle the registration of a new user
     user_credentials = load_credentials()
-    name = message['name']
-    username = message['username']
-    email = message['email']
-    password = message['password']
+    name = message["name"]
+    username = message["username"]
+    email = message["email"]
+    password = message["password"]
 
     # check if the username already exists
     if username in user_credentials:
-        response = {'type': 'register_response', 'status': 'failure', 'message': 'Username already exists'}
+        response = {"type": "register_response", "status": "failure", "message": "Username already exists"}
         logging.warning(f"Registration attempt denied for {username}: Username already exists.")
     # check if the password is too short, minimum 4 characters
     elif len(password) < 4:
-        response = {'type': 'register_response', 'status': 'failure', 'message': 'Password must be at least 4 characters'}
+        response = {"type": "register_response", "status": "failure", "message": "Password must be at least 4 characters"}
         logging.warning(f"Registration attempt denied for {username}: Password too short.")
     # check if the email is valid
-    elif not email or '@' not in email:
-        response = {'type': 'register_response', 'status': 'failure', 'message': 'Invalid email address'}
+    elif not email or "@" not in email:
+        response = {"type": "register_response", "status": "failure", "message": "Invalid email address"}
         logging.warning(f"Registration attempt denied for {username}: Invalid email address.")
-    # last check to make sure none of the fields are empty or over 16 characters
-    elif not all(len(field) <= 16 and field for field in [name, username, email]):
-        response = {'type': 'register_response', 'status': 'failure', 'message': 'Fields must not be empty or over 16 characters'}
+    # last check to make sure none of the fields are empty or over 32 characters
+    elif not all(len(field) <= 32 and field for field in [name, username, email]):
+        response = {"type": "register_response", "status": "failure", "message": "Fields must not be empty or over 16 characters"}
         logging.warning(f"Registration attempt denied for {username}: Fields must not be empty or over 16 characters.")
     # if all checks pass, we can register the user
     else:
         hashed_password = hash_password(password)
         with open("./data/user_credentials.txt", "a") as file:
             file.write(f"{username},{hashed_password},{name},{email}\n")
-        response = {'type': 'register_response', 'status': 'success', 'message': 'Registration successful'}
+        response = {"type": "register_response", "status": "success", "message": "Registration successful"}
         logging.info(f"Registration successful for {username}")
     try:
         client_socket.send(pickle.dumps(response))
@@ -367,24 +400,24 @@ def handle_register(message, client_socket):
 
 def handle_login(message, client_socket):
     user_credentials = load_credentials()
-    username = message['username']
-    password = message['password']
+    username = message["username"]
+    password = message["password"]
     hashed_password = hash_password(password)
 
     if username not in user_credentials:
-        response = {'type': 'login_response', 'status': 'failure', 'message': 'Username not found'}
+        response = {"type": "login_response", "status": "failure", "message": "Username not found"}
         logging.warning(f"Login attempt denied for {username}: Username not found.")
-    elif any(client['username'] == username for client in clients.values()):
-        response = {'type': 'login_response', 'status': 'failure', 'message': 'User already logged in'}
+    elif any(client["username"] == username for client in clients.values()):
+        response = {"type": "login_response", "status": "failure", "message": "User already logged in"}
         logging.warning(f"Login attempt denied for {username}: User already logged in.")
     else:
-        stored_hash = user_credentials[username].split(',')[0]  # Splitting to extract just the hash
+        stored_hash = user_credentials[username].split(",")[0]  # Splitting to extract just the hash
         if stored_hash != hashed_password:
-            response = {'type': 'login_response', 'status': 'failure', 'message': 'Incorrect password'}
+            response = {"type": "login_response", "status": "failure", "message": "Incorrect password"}
             logging.warning(f"Login attempt denied for {username}: Incorrect password.")
         else:
             clients[client_socket]["username"] = username  # Assuming this part is correctly managed elsewhere
-            response = {'type': 'login_response', 'status': 'success', 'message': 'Login successful for ' + username}
+            response = {"type": "login_response", "status": "success", "message": "Login successful for " + username}
             logging.info(f"Login successful for {username}")
 
     try:
