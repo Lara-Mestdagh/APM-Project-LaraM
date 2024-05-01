@@ -21,5 +21,6 @@ the client can ask.
 
 I then quickly added the code to request the user credentials, it can give the details of the selected clients or if no client is selected it shows all know details.
 I already implemented the logic for the get history button, it works with the same principle.
+Lastly I added some extra code so that the server can send a normal message or a wanring depending on which button is pressed.
 
 Now is time to start adding my requests to the client GUI.

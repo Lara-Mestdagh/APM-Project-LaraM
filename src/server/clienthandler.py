@@ -73,8 +73,21 @@ class ClientHandler:
                 self.message_queue.put(("login_failed", message))
         elif response["type"] == "data_parameters":
             print("Received data parameters from server.")
+            # need to keep track of the columns
             columns = response.get("columns", [])
-            self.message_queue.put(("data_parameters", columns))
+            # also need to know the unique values for certain columns
+            columns_values = response.get("columns_values", {})
+            # combine the columns and values into a single message
+            parameters = (columns, columns_values)
+
+            self.message_queue.put(("data_parameters", parameters))
+        elif response["type"] == "received_graph":
+            print("Received graph data from server.")
+            # need to keep track of the columns
+            graph_data = response.get("graph_data", "No data provided")
+
+            print(graph_data)
+            print("HERE MAKE THE GRAPH")
         else:
             self.handle_error(response)
 
@@ -129,3 +142,6 @@ class ClientHandler:
 
     def request_data(self):
         self.send_message({"type": "request_data_parameters"})
+
+    def request_graph(self, data_type):
+        self.send_message({"type": "request_graph", "data_type": data_type})

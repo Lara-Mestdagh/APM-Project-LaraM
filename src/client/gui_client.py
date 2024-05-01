@@ -3,6 +3,8 @@ import tkinter.messagebox as msgbox
 import queue
 import time
 import logging
+import pandas as pd
+import matplotlib.pyplot as plt
 
 from ..server.clienthandler import ClientHandler
 
@@ -55,22 +57,77 @@ def send_message_and_clear():
         message_input.delete(0, "end")  # Clear the input field after sending the message
 
 def show_dashboard():
-    global message_display, message_input, username
+    global message_display, message_input, username, request1_dropdown
     clear_window()
+    app.geometry("700x650")
     title = ctk.CTkLabel(master=app, text=f"Dashboard - {username}", font=("Arial", 16, "bold"))
     title.pack(pady=10)
 
     logout_button = ctk.CTkButton(master=app, text="Logout", command=logout)
-    logout_button.pack(pady=20)
+    logout_button.pack(pady=10)
+
+    # GUI elements for requests
+    # - Graph all villagers by race, gender, personality, and hobby.
+    # - Search all villagers by filtering by race, personality, birthday, and hobby.
+    # - Graph showing all catchphrases by beginning letter, amount of words, and amount of letters.
+    # - Show the amount of birthdays per month.
+
+    # frame for the requests
+    requests_frame = ctk.CTkFrame(master=app)
+    requests_frame.pack(pady=10, fill="both", expand=True)
+
+    # request 1
+    request1_frame = ctk.CTkFrame(master=requests_frame)
+    request1_frame.pack(pady=10, fill="both", expand=True)
+    
+    # Graph all villagers by race, personality, and hobby.
+    # use a button to trigger the request and have a dropdown to select the type of graph
+    request1_label = ctk.CTkLabel(master=request1_frame, text="Graph all villagers by:")
+    request1_label.pack(side="left", padx=10)
+
+    request1_dropdown = ctk.CTkOptionMenu(master=request1_frame, values="Species Gender Personality Hobby".split())
+    request1_dropdown.pack(side="left", padx=10) 
+
+    request1_button = ctk.CTkButton(master=request1_frame, text="Graph", command=handle_request1)
+    request1_button.pack(side="left", padx=10)
+
+
+
+
+    message_input = ctk.CTkEntry(master=app)
+    message_input.pack(pady=10, fill="x", padx=10)
+
+    send_button = ctk.CTkButton(master=app, text="Send Message", command=send_message_and_clear)
+    send_button.pack(pady=10)
 
     message_display = ctk.CTkTextbox(master=app, state="normal", height=10)
     message_display.pack(pady=20, fill="both", expand=True)
 
-    message_input = ctk.CTkEntry(master=app)
-    message_input.pack(pady=10, fill="x")
+def handle_data_parameters(data):
+    # (['Name', 'Species', 'Gender', 'Personality', 'Hobby', 'Birthday', 'Catchphrase', 'Favorite Song', 'Style 1', 'Style 2', 'Color 1', 'Color 2', 'Wallpaper', 'Flooring', 'Furniture List', 'Filename', 'Unique Entry ID'], {'Species': array(['Bird', 'Squirrel', 'Pig', 'Gorilla', 'Alligator', 'Koala',
+    #    'Eagle', 'Anteater', 'Bull', 'Mouse', 'Cat', 'Horse', 'Hamster',
+    #    'Kangaroo', 'Wolf', 'Penguin', 'Chicken', 'Elephant', 'Sheep',
+    #    'Deer', 'Tiger', 'Cub', 'Dog', 'Bear', 'Hippo', 'Duck', 'Goat',
+    #    'Ostrich', 'Rabbit', 'Lion', 'Frog', 'Monkey', 'Rhino', 'Octopus',
+    #    'Cow'], dtype=object), 'Personality': array(['Cranky', 'Peppy', 'Big Sister', 'Lazy', 'Normal', 'Snooty',
+    #    'Jock', 'Smug'], dtype=object), 'Hobby': array(['Nature', 'Fitness', 'Play', 'Education', 'Fashion', 'Music'],
+    #   dtype=object)})
+    # above is a print of the data parameters to know the structure of the data
+    # 
 
-    send_button = ctk.CTkButton(master=app, text="Send Message", command=send_message_and_clear)
-    send_button.pack(pady=10)
+
+
+    logging.info("Handling data parameters")
+
+
+def handle_request1():
+    logging.info(f"handle_request1 called with dropdown value: {request1_dropdown.get()}")
+    # get the selected value from the dropdown
+    data_type = request1_dropdown.get()
+    # send the request to the clienthandler
+    # client_handler.send_message({"type": "request_graph", "data_type": data_type})
+    client_handler.request_graph(data_type)
+    logging.info(f"Graph request sent, type {data_type}")
 
 def update_gui():
     global message_display, username
@@ -96,6 +153,12 @@ def update_gui():
             # get parameters from the message
             elif command == "data_parameters":
                 print("Data parameters received")
+                # add a function to handle the data parameters
+                handle_data_parameters(data)
+                print(data)
+            elif command == "graph_data":
+                print("Graph data received")
+                # add a function to handle the graph data
                 print(data)
             # if the command is empty, it is a message from the server
             elif command == "message":

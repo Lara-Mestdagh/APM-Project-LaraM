@@ -1,18 +1,5 @@
 TODO:
-Basic Interface Enhancements:
-Implement the buttons for requesting client details. This can be a simple form or dialog box that opens when you select a client from the logged-in list.
-Setup pop-up notifications on the client side that can display messages or warnings sent from the server.
-Logging and Monitoring:
-Enhance the server's logging window to include more detailed logs (e.g., timestamped entries, type of request, client ID).
-Implement a feature to view each client's search options history in a more organized manner, possibly with filters for date, search type, etc.
-
-
-
-
-
-- server can ask for client details, button on online clients
-- server can ask for full credentials too with a button to get all client details -> open new window?
-- someway to get the server to be able to send warnings to client? pop up warning that is
+- get all different data requests set up in GUI and link to logging for now
 
 
 
@@ -30,7 +17,7 @@ cliënts niet meer kunnen communiceren?
 
 
 Planned possibilities:
-- Graph all villagers by race, personality, and hobby.
+- Graph all villagers by race, gender, personality, and hobby.
 - Search all villagers by filtering by race, personality, birthday, and hobby.
 - Graph showing all catchphrases by beginning letter, amount of words, and amount of letters.
 - Show the amount of birthdays per month.

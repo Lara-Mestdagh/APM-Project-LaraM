@@ -291,11 +291,37 @@ def process_client_message(client_socket):
         elif message["type"] == "register":
             logging.info(f"Client {clients[client_socket]["username"]} has requested to register")
             handle_register(message, client_socket)
+        elif message["type"] == "request_graph":
+            logging.info(f"Client {clients[client_socket]["username"]} has requested a graph")
+            data_type = message["data_type"]
+            handle_request_graph(data_type, client_socket)
         else:
             logging.error(f"Unknown message type: {message["type"]}")
     except Exception as e:
         logging.error(f"Error handling message: {e}")
         remove_client(client_socket)
+
+def handle_request_graph(data_type, client_socket):
+    # graph data is column name, get the unique values and their counts to send to the client
+    global dataset
+    if dataset is None:
+        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
+        logging.warning("Graph request denied: Dataset not loaded")
+    else:
+        try:
+            # get the unique values and their counts
+            graph_data = dataset[data_type].value_counts()
+            response = {"type": "received_graph", "status": "success", "graph_data": graph_data}
+            logging.info("Graph data sent successfully")
+        except Exception as e:
+            response = {"type": "received_graph", "status": "failure", "message": f"Error processing graph data: {e}"}
+            logging.error(f"Error processing graph data: {e}")
+
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
+        
 
 def handle_request_data_parameters(message, client_socket):
     global dataset
@@ -303,9 +329,21 @@ def handle_request_data_parameters(message, client_socket):
         response = {"type": "data_parameters", "status": "failure", "message": "Dataset not loaded"}
         logging.warning("Data parameters request denied: Dataset not loaded")
     else:
+        # get the columns and the unique values for species, personality, and hobby
         columns = dataset.columns.tolist()
-        response = {"type": "data_parameters", "status": "success", "columns": columns}
+        species_values = dataset['Species'].unique()
+        personality_values = dataset['Personality'].unique()
+        hobby_values = dataset['Hobby'].unique()
+        # group the values into a dictionary
+        columns_values = {
+            "Species": species_values,
+            "Personality": personality_values,
+            "Hobby": hobby_values
+        }
+        response = {"type": "data_parameters", "status": "success", "columns": columns, "columns_values": columns_values}
+        logging.info("DELETE LATE: ", response)
         logging.info("Data parameters sent successfully")
+
     try:
         client_socket.send(pickle.dumps(response))
     except Exception as e:
@@ -348,12 +386,13 @@ def broadcast_message(message, sender_socket=None):
     for client_socket, checkbox_frame in client_checkboxes.items():
         # The first child of checkbox_frame should be the CTkCheckBox itself
         checkbox = checkbox_frame.winfo_children()[0]
-        if checkbox.get() == 1:  # Check if checkbox is selected
-            try:
-                client_socket.send(serialized_message)
-            except Exception as e:
-                logging.error(f"Error sending message to {clients[client_socket]["username"]}: {e}")
-                remove_client(client_socket)
+        if checkbox.winfo_exists():  # Check if the widget still exists before interaction
+            if checkbox.get() == 1:  # Check if checkbox is selected
+                try:
+                    client_socket.send(serialized_message)
+                except Exception as e:
+                    logging.error(f"Error sending message to {clients[client_socket]["username"]}: {e}")
+                    remove_client(client_socket)
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
