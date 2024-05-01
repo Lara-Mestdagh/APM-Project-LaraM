@@ -325,6 +325,10 @@ def process_client_message(client_socket):
             logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 2")
             data_type = message["data_type"]
             handle_request_bar_graph2(data_type, client_socket)
+        elif message["type"] == "request_bar_graph3":
+            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 3")
+            data_type = message["data_type"]
+            handle_request_bar_graph3(data_type, client_socket)
         else:
             logging.error(f"Unknown message type: {message["type"]}")
     except Exception as e:
@@ -372,6 +376,40 @@ def handle_request_bar_graph2(data_type, client_socket):
     except Exception as e:
         logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
         
+
+def handle_request_bar_graph3(data_type, client_socket):
+    # depending on data_type graph catchphrases by beginning letter, amount of words, and amount of letters.
+    global dataset
+    if dataset is None:
+        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
+        logging.warning("Graph request denied: Dataset not loaded")
+    else:
+        try:
+            if data_type == "Starting letter":
+                # Catchphrases by beginning letter
+                catchphrase_dataset = dataset["Catchphrase"].str[0].str.upper()
+                catchphrase_letter = catchphrase_dataset.value_counts().sort_index()
+                graph_data = catchphrase_letter
+            elif data_type == "Word count":
+                # Catchphrases by amount of words
+                catchphrase_dataset = dataset["Catchphrase"].str.split().str.len()
+                catchphrase_words = catchphrase_dataset.value_counts().sort_index()
+                graph_data = catchphrase_words
+            elif data_type == "Letter count":
+                # Catchphrases by amount of letters
+                catchphrase_dataset = dataset["Catchphrase"].str.len()
+                catchphrase_letters = catchphrase_dataset.value_counts().sort_index()
+                graph_data = catchphrase_letters
+
+            response = {"type": "received_graph3", "status": "success", "graph_data": graph_data, "data_type": data_type}
+        except Exception as e:
+            response = {"type": "received_graph3", "status": "failure", "message": f"Error processing graph data: {e}"}
+            logging.error(f"Error processing graph data: {e}")
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
+
 
 def handle_request_data_parameters(message, client_socket):
     global dataset

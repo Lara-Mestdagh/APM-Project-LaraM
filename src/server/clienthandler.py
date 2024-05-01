@@ -94,6 +94,13 @@ class ClientHandler:
             graph_data = response.get("graph_data", "No data provided")
             # send the graph data to the GUI to be displayed
             self.message_queue.put(("display_graph2", graph_data))
+        elif response["type"] == "received_graph3":
+            print("Received graph3 data from server.")
+            logging.info(f"Graph data received: {response.get('graph_data', 'No data provided')}")
+            graph_data = response.get("graph_data", "No data provided")
+            data_type = response.get("data_type", "No data type provided")
+            # send the graph data to the GUI to be displayed
+            self.message_queue.put(("display_graph3", graph_data, data_type))
         else:
             self.handle_error(response)
 
@@ -156,6 +163,6 @@ class ClientHandler:
         self.send_message({"type": "request_bar_graph2", "data_type": data_type})
 
     def request_bar_graph3(self, data_type):
-        # self.send_message({"type": "request_line_graph3", "data_type": data_type})
-        print("Requesting bar graph 3")
+        self.send_message({"type": "request_bar_graph3", "data_type": data_type})
+        # TODO delete after
         print("VVVVVVVVVVVVVVVVVVVVVV")

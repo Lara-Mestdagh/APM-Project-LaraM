@@ -188,6 +188,33 @@ def show_bar_graph2(graph_data):
     plt.ylabel('Month')
     plt.show()
 
+def show_bar_graph3(graph_data, title):
+    print("OOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
+    print(graph_data)
+    # Graphs showing all catchphrases by beginning letter, amount of words, and amount of letters.
+    data = graph_data
+
+    # Create a bar plot of the data
+    if title == "Starting letter":
+        print("IIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII")
+        data.plot(kind='barh', color=['blue'])
+        plt.title('Catchphrases by beginning letter')
+        plt.xlabel('Amount')
+        plt.ylabel('Letter')
+        plt.show()
+    elif title == "Word count":
+        data.plot(kind='barh', color=['blue'])
+        plt.title('Catchphrases by amount of words')
+        plt.xlabel('Amount')
+        plt.ylabel('Amount of words')
+        plt.show()
+    elif title == "Letter count":
+        data.plot(kind='barh', color=['blue'])
+        plt.title('Catchphrases by amount of letters')
+        plt.xlabel('Amount')
+        plt.ylabel('Amount of letters')
+        plt.show()
+
 def handle_request1():
     # get the selected value from the dropdown
     data_type = request1_dropdown.get()
@@ -206,7 +233,6 @@ def handle_request3():
     # get the selected value from the dropdown
     data_type = request3_dropdown.get()
     # send the request to the clienthandler
-    # client_handler.send_message({"type": "request_graph", "data_type": data_type})
     client_handler.request_bar_graph3(data_type)
     logging.info(f"Graph request sent, type {data_type}")
 
@@ -217,13 +243,16 @@ def update_gui():
     global message_display, username
     while not message_queue.empty():
         try:
-            command, data = message_queue.get_nowait()
+            entry = message_queue.get_nowait()
+            command = entry[0]  # Always expect the first element to be the command
+            # The rest are arguments, if any
+            args = entry[1:] if len(entry) > 1 else []
+
             if command == "show_dashboard":
-                # get the username from the message
-                username = data.split()[-1]
+                username = args[0].split()[-1] if args else "Unknown"
                 show_dashboard()
             elif command == "login_failed":
-                msgbox.showwarning("Login Failed", data if data else "Unknown error")
+                msgbox.showwarning("Login Failed", args[0] if args else "Unknown error")
             elif command == "connection_error":
                 show_retry_connection()
             elif command == "connection_success":
@@ -233,31 +262,35 @@ def update_gui():
             elif command == "show_login":
                 show_login()
             elif command == "login_failed":
-                logging.error(f"Login failed: {data}")
-            # get parameters from the message
+                logging.error(f"Login failed: {args[0] if args else 'No data provided'}")
             elif command == "data_parameters":
                 print("Data parameters received")
-                # add a function to handle the data parameters
-                handle_data_parameters(data)
-                print(data)
+                handle_data_parameters(args[0] if args else {})
+                print(args[0] if args else "No data")
             elif command == "graph_data":
                 print("Graph data received")
             elif command == "display_graph1":
                 print("Display graph1")
-                show_bar_graph1(data)     
+                show_bar_graph1(args[0] if args else {})
             elif command == "display_graph2":
                 print("Display graph2")
-                show_bar_graph2(data)           
-            # if the command is empty, it is a message from the server
+                show_bar_graph2(args[0] if args else {})
+            elif command == "display_graph3":
+                print("Display graph3")
+                if len(args) >= 2:
+                    show_bar_graph3(args[0], args[1])
+                else:
+                    logging.error("Not enough data provided for graph3")
             elif command == "message":
-                show_message(f"server: {data}")
+                show_message(f"server: {args[0] if args else 'No message'}")
             else:
-                logging.error(f"Unhandled command: {command}")
+                logging.error(f"Unhandled command in client: {command}")
         except ValueError as e:
-            logging.error(f"Queue message unpacking error: {e}")
+            logging.error(f"Queue message unpacking error in client: {e}")
         except Exception as e:
-            logging.error(f"General error processing GUI update: {e}")
+            logging.error(f"General error processing GUI update in client: {e}")
     app.after(100, update_gui)
+
 
 def logout():
     client_handler.logout()
