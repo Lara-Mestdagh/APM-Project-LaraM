@@ -296,7 +296,7 @@ def load_credentials():
                     user_credentials[username] = hashed_pwd
     except IOError as e:
         logging.error(f"Failed to read credentials file: {e}")
-    logging.info(f"Loaded credentials successfully: {user_credentials}")
+    logging.info(f"Loaded credentials successfully")
     return user_credentials
 
 def handle_register(message, client_socket):
@@ -307,15 +307,23 @@ def handle_register(message, client_socket):
     email = message['email']
     password = message['password']
 
+    # check if the username already exists
     if username in user_credentials:
         response = {'type': 'register_response', 'status': 'failure', 'message': 'Username already exists'}
         logging.warning(f"Registration attempt denied for {username}: Username already exists.")
+    # check if the password is too short, minimum 4 characters
     elif len(password) < 4:
         response = {'type': 'register_response', 'status': 'failure', 'message': 'Password must be at least 4 characters'}
         logging.warning(f"Registration attempt denied for {username}: Password too short.")
+    # check if the email is valid
     elif not email or '@' not in email:
         response = {'type': 'register_response', 'status': 'failure', 'message': 'Invalid email address'}
         logging.warning(f"Registration attempt denied for {username}: Invalid email address.")
+    # last check to make sure none of the fields are empty or over 16 characters
+    elif not all(len(field) <= 16 and field for field in [name, username, email]):
+        response = {'type': 'register_response', 'status': 'failure', 'message': 'Fields must not be empty or over 16 characters'}
+        logging.warning(f"Registration attempt denied for {username}: Fields must not be empty or over 16 characters.")
+    # if all checks pass, we can register the user
     else:
         hashed_password = hash_password(password)
         with open("./data/user_credentials.txt", "a") as file:
@@ -334,9 +342,6 @@ def handle_login(message, client_socket):
     password = message['password']
     hashed_password = hash_password(password)
 
-    logging.info(f"Login attempt for {username} with password {password}")
-    logging.info(f"Hashed password: {hashed_password}")
-
     if username not in user_credentials:
         response = {'type': 'login_response', 'status': 'failure', 'message': 'Username not found'}
         logging.warning(f"Login attempt denied for {username}: Username not found.")
@@ -350,7 +355,7 @@ def handle_login(message, client_socket):
             logging.warning(f"Login attempt denied for {username}: Incorrect password.")
         else:
             clients[client_socket]["username"] = username  # Assuming this part is correctly managed elsewhere
-            response = {'type': 'login_response', 'status': 'success', 'message': 'Login successful'}
+            response = {'type': 'login_response', 'status': 'success', 'message': 'Login successful for ' + username}
             logging.info(f"Login successful for {username}")
 
     try:

@@ -55,9 +55,9 @@ def send_message_and_clear():
         message_input.delete(0, 'end')  # Clear the input field after sending the message
 
 def show_dashboard():
-    global message_display, message_input
+    global message_display, message_input, username
     clear_window()
-    title = ctk.CTkLabel(master=app, text="Dashboard", font=("Arial", 15, "bold"))
+    title = ctk.CTkLabel(master=app, text=f"Dashboard - {username}", font=("Arial", 16, "bold"))
     title.pack(pady=10)
 
     logout_button = ctk.CTkButton(master=app, text="Logout", command=logout)
@@ -73,11 +73,13 @@ def show_dashboard():
     send_button.pack(pady=10)
 
 def update_gui():
-    global message_display
+    global message_display, username
     while not message_queue.empty():
         try:
             command, data = message_queue.get_nowait()
             if command == "show_dashboard":
+                # get the username from the message
+                username = data.split()[-1]
                 show_dashboard()
             elif command == "login_failed":
                 msgbox.showwarning("Login Failed", data if data else "Unknown error")

@@ -58,7 +58,7 @@ class ClientHandler:
             message = response.get('message', 'No message provided')
             if status == 'success':
                 print("Login successful, updating GUI to show dashboard.")
-                self.message_queue.put(("show_dashboard", None))  # Ensure second value is None if no additional data
+                self.message_queue.put(("show_dashboard", message))  # Ensure second value is None if no additional data
             else:
                 print("Login failed, showing error message.")
                 self.message_queue.put(("login_failed", message))

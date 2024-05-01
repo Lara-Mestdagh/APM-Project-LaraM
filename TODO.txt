@@ -1,6 +1,7 @@
 TODO:
-- add registration
-- read in dataset when server starts, add error logging to this
+- server can ask for client details, button on online clients
+- server can ask for full credentials too with a button to get all client details -> open new window?
+- someway to get the server to be able to send warnings to client? pop up warning that is
 
 
 
