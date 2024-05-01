@@ -114,8 +114,14 @@ def logout():
 
 def show_message(message):
     global message_display
-    message_display.insert("end", message + "\n")
-    message_display.see("end")
+    # check if contains WARNING
+    if "WARNING" in message:
+        # remove the WARNING from the message
+        message = message.replace("WARNING", "")
+        msgbox.showwarning("Warning", message)
+    else:
+        message_display.insert("end", message + "\n")
+        message_display.see("end")
 
 def show_login():
     clear_window()

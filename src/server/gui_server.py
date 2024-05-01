@@ -30,7 +30,7 @@ def create_server_gui():
     global clients_frame, message_input, message_display, app, server_status
     app = ctk.CTk()
     app.title("Server Control Panel")
-    app.geometry("550x650")
+    app.geometry("550x700")
 
     # Create the server status components
     status_frame = ctk.CTkFrame(master=app)
@@ -56,13 +56,16 @@ def create_server_gui():
 
     # Create the connected clients display and request details components
 
+    clients_label = ctk.CTkLabel(master=app, text="Connected Clients", font=("Arial", 14, "bold"))
+    clients_label.pack(pady=6)
+
     button_frame = ctk.CTkFrame(master=app)
     button_frame.pack(fill="x", padx=20, pady=10)
     
-    details_button = ctk.CTkButton(master=button_frame, text="Details", command=request_details)
+    details_button = ctk.CTkButton(master=button_frame, text="Get Details", command=request_details)
     details_button.pack(side="right")
 
-    history_button = ctk.CTkButton(master=button_frame, text="History", command=request_search_history)
+    history_button = ctk.CTkButton(master=button_frame, text="Get History", command=request_search_history)
     history_button.pack(side="left")
 
     clients_frame = ctk.CTkFrame(master=app)
@@ -77,6 +80,9 @@ def create_server_gui():
 
     send_button = ctk.CTkButton(master=message_frame, text="Send Message", command=on_send)
     send_button.pack(side="left", padx=10)
+
+    warning_button = ctk.CTkButton(master=message_frame, text="Send Warning", command=send_warning)
+    warning_button.pack(side="left")
 
     display_frame = ctk.CTkFrame(master=app)
     display_frame.pack(fill="both", expand=True, padx=20, pady=10)
@@ -232,6 +238,14 @@ def on_send():
     message = message_input.get().strip()
     if message:
         broadcast_message(message)
+        message_input.delete(0, ctk.END)
+
+def send_warning():
+    global message_input
+    # add warning prefix to the message
+    message = "WARNING" + message_input.get().strip()
+    if message:
+        broadcast_message(message, sender_socket=None)
         message_input.delete(0, ctk.END)
 
 def display_message(message):
