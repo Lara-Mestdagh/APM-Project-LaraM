@@ -252,11 +252,11 @@ def update_gui():
             elif command == "message":
                 show_message(f"server: {data}")
             else:
-                logging.error(f"Unhandled command: {command}")
+                logging.error(f"Unhandled command in client: {command}")
         except ValueError as e:
-            logging.error(f"Queue message unpacking error: {e}")
+            logging.error(f"Queue message unpacking error in client: {e}")
         except Exception as e:
-            logging.error(f"General error processing GUI update: {e}")
+            logging.error(f"General error processing GUI update in client: {e}")
     app.after(100, update_gui)
 
 def logout():

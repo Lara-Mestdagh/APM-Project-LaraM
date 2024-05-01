@@ -27,6 +27,7 @@ sockets_list = []
 clients = {}
 client_checkboxes = {}
 clients_lock = Lock()
+history_lock = threading.Lock()
 
 def create_server_gui():
     global clients_frame, message_input, message_display, app, server_status
@@ -102,7 +103,7 @@ def update_server_status(status):
     server_status.configure(text=f"Server Status: {status}", fg_color=("white", color))
 
 def start_server():
-    global server_socket, server_thread, server_running, server_status, dataset
+    global server_socket, server_thread, server_running, server_status, dataset, request_history
     if not server_running:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -123,7 +124,8 @@ def start_server():
         logging.info(f"Dataset after preprocessing: {preprocessor.dataset.head().describe()}")
         # log the species and personality heatmap
         preprocessor.species_personality_heatmap()
-        # dataset = read_dataset()
+        # load the request history
+        request_history = load_request_history()
 
         logging.info("Server started")
 
@@ -248,11 +250,18 @@ def request_details():
                 logging.warning(f"No details found for {username}")
 
 def request_search_history():
-    # for now log if the request was made for all clients or selected clients
+    global request_history
+    request_history = load_request_history()
+    # if the request was made for all clients or selected clients
     selected_clients = [client_socket for client_socket, checkbox_frame in client_checkboxes.items() if checkbox_frame.winfo_children()[0].get() == 1]
 
-    if not selected_clients:
+    if not selected_clients and request_history:    # if no clients are selected and there is history
         logging.info("Requesting search history for all clients")
+        # count all requests made and sort them by the number of requests
+        for username, requests in sorted(request_history.items(), key=lambda x: sum(x[1].values()), reverse=True):
+            logging.info(f"Search history for {username}: {requests}")
+    elif not selected_clients and not request_history:    # if no clients are selected and there is no history
+        logging.info("No search history available")
     else:
         logging.info(f"Requesting search history for {len(selected_clients)} clients")
         for client_socket in selected_clients:
@@ -321,12 +330,14 @@ def process_client_message(client_socket):
             logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 1")
             data_type = message["data_type"]
             handle_request_bar_graph1(data_type, client_socket)
+            update_request_history(clients[client_socket]["username"], 1)
         elif message["type"] == "request_bar_graph2":
             logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 2")
             data_type = message["data_type"]
             handle_request_bar_graph2(data_type, client_socket)
+            update_request_history(clients[client_socket]["username"], 2)
         else:
-            logging.error(f"Unknown message type: {message["type"]}")
+            logging.error(f"Unknown message type: {message["type"]} - {message}")
     except Exception as e:
         logging.error(f"Error handling message: {e}")
         remove_client(client_socket)
@@ -339,17 +350,15 @@ def handle_request_bar_graph1(data_type, client_socket):
         logging.warning("Graph request denied: Dataset not loaded")
     else:
         try:
-            # get the unique values and their counts
             graph_data = dataset[data_type].value_counts()
             response = {"type": "received_graph1", "status": "success", "graph_data": graph_data}
         except Exception as e:
-            response = {"type": "received_graph1", "status": "failure", "message": f"Error processing graph data: {e}"}
+            response = {"type": "received_graph1", "status": "failure", "message": str(e)}
             logging.error(f"Error processing graph data: {e}")
-
     try:
         client_socket.send(pickle.dumps(response))
     except Exception as e:
-        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
+        logging.error(f"Error sending response to {clients[client_socket]['username']}: {e}")
 
 def handle_request_bar_graph2(data_type, client_socket):
     global dataset  
@@ -445,6 +454,43 @@ def broadcast_message(message, sender_socket=None):
 
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
+
+def save_request_history(request_history):
+    history_path = "./data/request_history.txt"
+    # save the request history to the file
+    with open(history_path, "w") as file:
+        for username, requests in request_history.items():
+            for request_type, count in requests.items():
+                file.write(f"{username},{request_type},{count}\n")
+
+def update_request_history(username, request_id):
+    # update the request history for the user
+    request_history = load_request_history()
+    # if the user is not in the history, add them
+    if username not in request_history:
+        request_history[username] = {}
+    # if the request is not 1 - 4, log an error
+    if request_id not in range(1, 5):
+        logging.error(f"Invalid request ID: {request_id}")
+        return
+    # increment the count for the request
+    request_history[username][request_id] += 1
+    save_request_history(request_history)
+
+def load_request_history():
+    history_path = "./data/request_history.txt"
+    request_history = {}
+    try:
+        with open(history_path, "r") as file:
+            for line in file:
+                username, request_type, count = line.strip().split(',')
+                if username not in request_history:
+                    request_history[username] = {}
+                request_history[username][request_type] = int(count)
+    except FileNotFoundError:
+        with open(history_path, "w") as file:  # Create file if it doesn't exist
+            pass
+    return request_history
 
 def load_credentials():
     user_credentials = {}
