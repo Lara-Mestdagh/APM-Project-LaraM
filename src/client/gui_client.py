@@ -67,10 +67,8 @@ def show_dashboard():
     logout_button.pack(pady=10)
 
     # GUI elements for requests
-    # - Graph all villagers by race, gender, personality, and hobby.
     # - Search all villagers by filtering by race, personality, birthday, and hobby.
     # - Graph showing all catchphrases by beginning letter, amount of words, and amount of letters.
-    # - Show the amount of birthdays per month.
 
     # frame for the requests
     requests_frame = ctk.CTkFrame(master=app)
@@ -91,6 +89,16 @@ def show_dashboard():
     request1_button = ctk.CTkButton(master=request1_frame, text="Graph", command=handle_request1)
     request1_button.pack(side="left", padx=10)
 
+    # - Show the amount of birthdays per month.
+    # request 2
+    request2_frame = ctk.CTkFrame(master=requests_frame)
+    request2_frame.pack(pady=10, fill="both", expand=True)
+
+    request2_label = ctk.CTkLabel(master=request2_frame, text="Show the amount of birthdays per month.")
+    request2_label.pack(side="left", padx=10)
+
+    request2_button = ctk.CTkButton(master=request2_frame, text="Graph", command=handle_request2)
+    request2_button.pack(side="left", padx=10)
 
 
 
@@ -104,30 +112,12 @@ def show_dashboard():
     message_display.pack(pady=20, fill="both", expand=True)
 
 def handle_data_parameters(data):
-    # (['Name', 'Species', 'Gender', 'Personality', 'Hobby', 'Birthday', 'Catchphrase', 'Favorite Song', 'Style 1', 'Style 2', 'Color 1', 'Color 2', 'Wallpaper', 'Flooring', 'Furniture List', 'Filename', 'Unique Entry ID'], {'Species': array(['Bird', 'Squirrel', 'Pig', 'Gorilla', 'Alligator', 'Koala',
-    #    'Eagle', 'Anteater', 'Bull', 'Mouse', 'Cat', 'Horse', 'Hamster',
-    #    'Kangaroo', 'Wolf', 'Penguin', 'Chicken', 'Elephant', 'Sheep',
-    #    'Deer', 'Tiger', 'Cub', 'Dog', 'Bear', 'Hippo', 'Duck', 'Goat',
-    #    'Ostrich', 'Rabbit', 'Lion', 'Frog', 'Monkey', 'Rhino', 'Octopus',
-    #    'Cow'], dtype=object), 'Personality': array(['Cranky', 'Peppy', 'Big Sister', 'Lazy', 'Normal', 'Snooty',
-    #    'Jock', 'Smug'], dtype=object), 'Hobby': array(['Nature', 'Fitness', 'Play', 'Education', 'Fashion', 'Music'],
-    #   dtype=object)})
-    # above is a print of the data parameters to know the structure of the data
-    # 
-
     # TODO: check later if still needed
 
     logging.info("Handling data parameters")
 
 
-def handle_graph_data(graph_data):
-    print("EEEEEEEEEEEEEEEEEEEE")
-    print(graph_data)
-    # below is the print of the graph data to know the structure of the data
-    # Gender
-    # Male      204
-    # Female    187
-    # Name: count, dtype: int64
+def show_bar_graph1(graph_data):
     # Get the type of data the graph is displaying for the title
     data_type = graph_data.index.name
     # Create a bar plot of the data
@@ -137,13 +127,32 @@ def handle_graph_data(graph_data):
     plt.ylabel(data_type)
     plt.show()
 
+def show_bar_graph2(graph_data):
+    # Get the names of the months
+    months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+    # Set the y-axis labels to be the names of the months
+    graph_data.index = months
+
+    graph_data.plot(kind='barh', color=['blue'])  
+    plt.title('Birthdays per Month')
+    plt.xlabel('Count')
+    plt.ylabel('Month')
+    plt.show()
+
 def handle_request1():
     # get the selected value from the dropdown
     data_type = request1_dropdown.get()
     # send the request to the clienthandler
     # client_handler.send_message({"type": "request_graph", "data_type": data_type})
-    client_handler.request_graph(data_type)
+    client_handler.request_bar_graph1(data_type)
     logging.info(f"Graph request sent, type {data_type}")
+
+def handle_request2():
+    # send the request to the clienthandler
+    # client_handler.send_message({"type": "request_graph", "data_type": "Birthday"})
+    client_handler.request_bar_graph2("Birthday")
+    logging.info(f"Graph request sent, type Birthday")
 
 def update_gui():
     global message_display, username
@@ -174,12 +183,12 @@ def update_gui():
                 print(data)
             elif command == "graph_data":
                 print("Graph data received")
-                print("OOOOOOOOOOO")
-                # add a function to handle the graph data
-                print(data)
-            elif command == "display_graph":
-                print("Display graph")
-                handle_graph_data(data)                
+            elif command == "display_graph1":
+                print("Display graph1")
+                show_bar_graph1(data)     
+            elif command == "display_graph2":
+                print("Display graph2")
+                show_bar_graph2(data)           
             # if the command is empty, it is a message from the server
             elif command == "message":
                 show_message(f"server: {data}")

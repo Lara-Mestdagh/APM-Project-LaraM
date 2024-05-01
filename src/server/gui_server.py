@@ -121,8 +121,24 @@ def read_dataset():
     global dataset
     # Load the dataset from the file 
     try:
-        dataset = pd.read_csv("./data/Animal_Crossing_Villagers.csv")
+        dataset = pd.read_csv("./data/Animal_Crossing_Villagers.csv", dtype={
+            'Name': 'str', 'Species': 'str', 'Gender': 'str', 'Personality': 'str', 'Hobby': 'str'
+        })
         logging.info("Dataset loaded successfully")
+
+        # TODO: Add any additional processing here
+        # Drop rows with missing values
+        dataset = dataset.dropna()
+        logging.info(f"Rows with missing values dropped, remaining rows: {len(dataset)}")
+
+        # Convert Birthday to datetime
+        dataset['Birthday'] = pd.to_datetime(dataset['Birthday'], format='%d-%b')
+
+        # Drop unnecessary columns
+        drop_cols = ['Favorite Song', 'Style 1', 'Style 2', 'Color 1', 'Color 2', 'Wallpaper', 'Flooring', 'Furniture List', 'Filename']
+        dataset = dataset.drop(columns=drop_cols)
+        logging.info("Unnecessary columns dropped.")
+
         return dataset
     except Exception as e:
         logging.error(f"Error loading dataset: {e}")
@@ -291,17 +307,21 @@ def process_client_message(client_socket):
         elif message["type"] == "register":
             logging.info(f"Client {clients[client_socket]["username"]} has requested to register")
             handle_register(message, client_socket)
-        elif message["type"] == "request_graph":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a graph")
+        elif message["type"] == "request_bar_graph1":
+            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph")
             data_type = message["data_type"]
-            handle_request_graph(data_type, client_socket)
+            handle_request_bar_graph1(data_type, client_socket)
+        elif message["type"] == "request_bar_graph2":
+            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph")
+            data_type = message["data_type"]
+            handle_request_bar_graph2(data_type, client_socket)
         else:
             logging.error(f"Unknown message type: {message["type"]}")
     except Exception as e:
         logging.error(f"Error handling message: {e}")
         remove_client(client_socket)
 
-def handle_request_graph(data_type, client_socket):
+def handle_request_bar_graph1(data_type, client_socket):
     # graph data is column name, get the unique values and their counts to send to the client
     global dataset
     if dataset is None:
@@ -311,12 +331,34 @@ def handle_request_graph(data_type, client_socket):
         try:
             # get the unique values and their counts
             graph_data = dataset[data_type].value_counts()
-            response = {"type": "received_graph", "status": "success", "graph_data": graph_data}
+            response = {"type": "received_graph1", "status": "success", "graph_data": graph_data}
             logging.info("Graph data sent successfully")
         except Exception as e:
-            response = {"type": "received_graph", "status": "failure", "message": f"Error processing graph data: {e}"}
+            response = {"type": "received_graph1", "status": "failure", "message": f"Error processing graph data: {e}"}
             logging.error(f"Error processing graph data: {e}")
 
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
+
+def handle_request_bar_graph2(data_type, client_socket):
+    global dataset  
+    if dataset is None:
+        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
+        logging.warning("Graph request denied: Dataset not loaded")
+    else:
+        try:
+             # Extract the month from the date column
+            dataset['Month'] = pd.to_datetime(dataset[data_type]).dt.month
+            # Count the number of occurrences of each month
+            graph_data = dataset['Month'].value_counts().sort_index()            
+            response = {"type": "received_graph2", "status": "success", "graph_data": graph_data}
+            logging.info("Graph data sent successfully")
+        except Exception as e:
+            response = {"type": "received_graph2", "status": "failure", "message": f"Error processing graph data: {e}"}
+            logging.error(f"Error processing graph data: {e}")
+    
     try:
         client_socket.send(pickle.dumps(response))
     except Exception as e:
@@ -341,7 +383,6 @@ def handle_request_data_parameters(message, client_socket):
             "Hobby": hobby_values
         }
         response = {"type": "data_parameters", "status": "success", "columns": columns, "columns_values": columns_values}
-        logging.info("DELETE LATE: ", response)
         logging.info("Data parameters sent successfully")
 
     try:

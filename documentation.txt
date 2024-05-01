@@ -23,4 +23,5 @@ I then quickly added the code to request the user credentials, it can give the d
 I already implemented the logic for the get history button, it works with the same principle.
 Lastly I added some extra code so that the server can send a normal message or a wanring depending on which button is pressed.
 
-Now is time to start adding my requests to the client GUI.
+Now is time to start adding my requests to the client GUI. I started with my first request which would display a bar graph depending on which option is selected.
+it shows all villagers by species, gender, personality and hobby. I get the correct data from the server and give it to the gui client to make a plot.

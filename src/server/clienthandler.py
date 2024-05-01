@@ -29,10 +29,9 @@ class ClientHandler:
                 self.handle_disconnection("Failed to send message")
 
     def receive_messages(self):
-        buffer_size = 4096  # Set buffer size to 4 KB, adjust as needed
+        buffer_size = 10096  # adjust as needed
         while self.running:
             try:
-                # increased buffer size since we are getting larger data
                 response = self.client_socket.recv(buffer_size)
                 if not response:
                     raise ConnectionResetError("Server has closed the connection")
@@ -83,12 +82,18 @@ class ClientHandler:
             parameters = (columns, columns_values)
 
             self.message_queue.put(("data_parameters", parameters))
-        elif response["type"] == "received_graph":
-            print("Received graph data from server.")
-            # need to keep track of the columns
+        elif response["type"] == "received_graph1":
+            print("Received graph1 data from server.")
+            logging.info(f"Graph data received: {response.get('graph_data', 'No data provided')}")
             graph_data = response.get("graph_data", "No data provided")
             # send the graph data to the GUI to be displayed
-            self.message_queue.put(("display_graph", graph_data))
+            self.message_queue.put(("display_graph1", graph_data))
+        elif response["type"] == "received_graph2":
+            print("Received graph2 data from server.")
+            logging.info(f"Graph data received: {response.get('graph_data', 'No data provided')}")
+            graph_data = response.get("graph_data", "No data provided")
+            # send the graph data to the GUI to be displayed
+            self.message_queue.put(("display_graph2", graph_data))
         else:
             self.handle_error(response)
 
@@ -144,5 +149,8 @@ class ClientHandler:
     def request_data(self):
         self.send_message({"type": "request_data_parameters"})
 
-    def request_graph(self, data_type):
-        self.send_message({"type": "request_graph", "data_type": data_type})
+    def request_bar_graph1(self, data_type):
+        self.send_message({"type": "request_bar_graph1", "data_type": data_type})
+
+    def request_bar_graph2(self, data_type):
+        self.send_message({"type": "request_bar_graph2", "data_type": data_type})
