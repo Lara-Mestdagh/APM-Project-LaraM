@@ -27,3 +27,8 @@ Now is time to start adding my requests to the client GUI. I started with my fir
 it shows all villagers by species, gender, personality and hobby. I get the correct data from the server and give it to the gui client to make a plot.
 
 next I made the plot that counts the amount of birthdays per month since it was very similar to the previous one.
+
+the 3rd graph was a bit more work, I had to rework my update_gui to take 3 arguments since I needed the specific texts from the dropdownbox.
+
+Lastly you can select the options for species, personality and hobby to filter the dataset. This opens a customtinker top level with a table inside
+filled with the result of the search. if a parameter is left empty it does not apply.
