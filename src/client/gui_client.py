@@ -1,4 +1,7 @@
 import customtkinter as ctk
+from tkinter import messagebox
+import pickle
+import socket
 import tkinter.messagebox as msgbox
 import queue
 import datetime
@@ -6,10 +9,11 @@ import logging
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import threading
 
-from ..server.clienthandler import ClientHandler
-
-
+# Create a socket object
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+connected = False
 # Setup logging configuration
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
@@ -25,6 +29,83 @@ def clear_window():
     for widget in app.winfo_children():
         widget.destroy()
 
+def listen_for_server_messages():
+    global connected
+    try:
+        while connected:
+            try:
+                data = client_socket.recv(1024)
+                if not data:
+                    raise ConnectionError("Server closed the connection")
+                data = pickle.loads(data)
+                app.after(0, handle_server_message, data)
+            except Exception as e:
+                logging.error(f"Failed to receive message: {e}")
+                connected = False
+                app.after(0, handle_connection_error, e)
+                break
+    except ConnectionError as e:
+        logging.error(f"Connection lost: {e}")
+        connected = False
+
+def handle_server_message(data):
+    global username, species, personality, hobby
+    # Process server message here, update GUI or handle data
+    # remember the message is already deserialized
+    print("Received data:", data)
+    if 'type' in data:
+        # depending on the type of data, handle it accordingly
+        if data['type'] == "login_response":                        # handle login response here
+            # check if the response is successful
+            if data['data']['status'] == "success":                 # login successful
+                print("Login successful")
+                # get the username from the data
+                username = data['data']['message'].split()[-1]
+                show_dashboard()
+            else:
+                print("Login failed")
+                messagebox.showwarning("Login Failed", data['data']['message'])             # Login failed
+        elif data['type'] == "register_response":                   # handle register response here
+            if data['data']['status'] == "success":
+                print("Registration successful")                    
+                messagebox.showinfo("Registration Successful", data['data']['message'])     # Registration successful
+                show_login()
+            else:
+                print("Registration failed")
+                # get the message of why the registration failed and send a warning message screen
+                messagebox.showwarning("Registration Failed", data['data']['message'])      # Registration failed
+        elif data['type'] == "data_parameters":                    # handle data parameters here    
+            # we need these for our dropdowns for the search villagers request
+            species = data['data']['columns_values']['Species']
+            personality = data['data']['columns_values']['Personality']
+            hobby = data['data']['columns_values']['Hobby']
+    else:
+        logging.error("Invalid message type received from server.")
+        return
+
+def handle_connection_error(e):
+    logging.error(f"Connection error: {e}")
+    msgbox.showerror("Connection Error", f"Error communicating with the server: {e}")
+    show_retry_connection()
+
+def create_connection():
+    global client_socket, connected
+    if not connected:
+        try:
+            client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket.connect((HOST, PORT))
+            client_socket.settimeout(None)  # Optional
+            connected = True
+            show_login()
+            logging.info("Connected to the server successfully.")
+            # Start listening thread
+            threading.Thread(target=listen_for_server_messages, daemon=True).start()
+        except socket.error as e:
+            logging.error(f"Failed to connect to the server: {e}")
+            client_socket.close()
+            connected = False
+            show_retry_connection()
+
 def show_retry_connection():
     clear_window()
     title = ctk.CTkLabel(master=app, text="Connection Error")
@@ -33,33 +114,37 @@ def show_retry_connection():
     message = ctk.CTkLabel(master=app, text="Failed to connect to the server. Trying again...")
     message.pack(pady=10)
 
-    retry_button = ctk.CTkButton(master=app, text="Retry Connection", command=attempt_reconnect)
+    retry_button = ctk.CTkButton(master=app, text="Retry Connection", command=create_connection)
     retry_button.pack(pady=20)
 
     back_button = ctk.CTkButton(master=app, text="Exit", command=app.quit)
     back_button.pack(pady=10)
 
-def attempt_reconnect():
-    logging.info("Attempting to reconnect to the server...")
-    try:
-        client_handler.connect_to_server()
-        if client_handler.running:
-            show_login() 
-            return
-    except Exception as e:
-        logging.error(f"Retry failed: {e}")
-    logging.error("Failed to connect to the server. Check your network and try again.")
+def send_request(request_type, data):
+    global connected
+    if connected:
+        try:
+            request = {"type": request_type, "data": data}
+            client_socket.send(pickle.dumps(request))
+            logging.info("Request sent successfully.")
+        except socket.error as e:
+            logging.error(f"Socket error: {e}")
+            connected = False
+            create_connection()  # Attempt to reconnect
+    else:
+        logging.error("Socket is not connected.")
+        create_connection()  # Attempt to reconnect
 
 def send_message_and_clear():
     global message_input
     message = message_input.get()  # Get the message from the input field
     if message.strip():  # Ensure the message is not just empty spaces
-        client_handler.send_message(message)  # Send the message using the ClientHandler
+        send_request("message", message)
         message_input.delete(0, "end")  # Clear the input field after sending the message
 
 def show_dashboard():
     global message_display, message_input, username, request1_dropdown, request3_dropdown
-    global request4_species, request4_personality, request4_hobby
+    global request4_species, request4_personality, request4_hobby, species, personality, hobby
     clear_window()
     app.geometry("1000x750")
     title = ctk.CTkLabel(master=app, text=f"Dashboard - {username}", font=("Arial", 16, "bold"))
@@ -256,21 +341,19 @@ def handle_request1():
     # get the selected value from the dropdown
     data_type = request1_dropdown.get()
     # send the request to the clienthandler
-    # client_handler.send_message({"type": "request_graph", "data_type": data_type})
-    client_handler.request_bar_graph1(data_type)
+    send_request("request_bar_graph1", data_type)
     logging.info(f"Graph request sent, type {data_type}")
 
 def handle_request2():
     # send the request to the clienthandler
-    # client_handler.send_message({"type": "request_graph", "data_type": "Birthday"})
-    client_handler.request_bar_graph2("Birthday")
+    send_request("request_bar_graph2", "Birthday")
     logging.info(f"Graph request sent, type Birthday")
 
 def handle_request3():
     # get the selected value from the dropdown
     data_type = request3_dropdown.get()
     # send the request to the clienthandler
-    client_handler.request_bar_graph3(data_type)
+    send_request("request_bar_graph3", data_type)
     logging.info(f"Graph request sent, type {data_type}")
 
 def handle_request4():
@@ -281,7 +364,7 @@ def handle_request4():
     hobby = request4_hobby.get() if request4_hobby.get() != "" else None
 
     # send the request to the clienthandler
-    client_handler.request_search_villagers(species, personality, hobby)
+    send_request("request_search_villagers", {"species": species, "personality": personality, "hobby": hobby})
     logging.info(f"Search request sent, species: {species}, personality: {personality}, hobby: {hobby}")
 
 def update_gui():
@@ -341,7 +424,7 @@ def update_gui():
     app.after(100, update_gui)
 
 def logout():
-    client_handler.logout()
+    send_request("user_logout", "")
     show_login()
 
 def show_message(message):
@@ -367,11 +450,12 @@ def show_login():
     password_entry = ctk.CTkEntry(master=app, placeholder_text="Password", show="*")
     password_entry.pack(pady=10)
 
-    def on_enter_key(event):
-        client_handler.login(username_entry.get(), password_entry.get())  # Trigger login on Enter key
+    def on_enter_key(event=None):
+        send_request("user_login", {"username": username_entry.get(), "password": password_entry.get()})
+
     app.bind("<Return>", on_enter_key)  # Bind the Enter key to the login action
 
-    login_button = ctk.CTkButton(master=app, text="Login", command=lambda: client_handler.login(username_entry.get(), password_entry.get()))
+    login_button = ctk.CTkButton(master=app, text="Login", command=on_enter_key)
     login_button.pack(pady=10)
 
     register_button = ctk.CTkButton(master=app, text="Register", command=show_register)
@@ -394,13 +478,15 @@ def show_register():
     password_entry = ctk.CTkEntry(master=app, placeholder_text="Password", show="*")
     password_entry.pack(pady=10)
 
-    register_button = ctk.CTkButton(master=app, text="Register", command=lambda: client_handler.register(name_entry.get(), username_entry.get(), email_entry.get(), password_entry.get()))
+    def request_register():
+        send_request("user_register", {"name": name_entry.get(), "username": username_entry.get(), "email": email_entry.get(), "password": password_entry.get()})
+
+    register_button = ctk.CTkButton(master=app, text="Register", command=request_register)
     register_button.pack(pady=10)
 
     back_button = ctk.CTkButton(master=app, text="Back", command=show_login)
     back_button.pack(pady=10)
-    
-client_handler = ClientHandler(HOST, PORT, message_queue)
-app.after(100, update_gui)
-show_login()
+
+app.after(100, create_connection)  # Start by checking the connection
+app.after(100, update_gui)  # Start the GUI update loop
 app.mainloop()

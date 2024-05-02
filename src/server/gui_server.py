@@ -8,9 +8,10 @@ import pickle
 import os
 import logging
 import pandas as pd
+from queue import Queue
 
 from datasetpre import Dataset
-
+from clienthandler import ClientHandler
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -100,13 +101,16 @@ def update_server_status(status):
     server_status.configure(text=f"Server Status: {status}", fg_color=("white", color))
 
 def start_server():
-    global server_socket, server_thread, server_running, server_status, dataset
+    global server_socket, server_thread, server_running, server_status, dataset, message_queue
     if not server_running:
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind((HOST, PORT))
         server_socket.listen()
         sockets_list.append(server_socket)
+
+        # Initialize the message queue here
+        message_queue = Queue()
 
         server_running = True
         server_thread = threading.Thread(target=accept_connections)
@@ -125,68 +129,51 @@ def start_server():
 
         logging.info("Server started")
 
-def read_dataset():
-    global dataset
-    # Load the dataset from the file 
-    try:
-        dataset = pd.read_csv("./data/Animal_Crossing_Villagers.csv", dtype={
-            'Name': 'str', 'Species': 'str', 'Gender': 'str', 'Personality': 'str', 'Hobby': 'str'
-        })
-        logging.info("Dataset loaded successfully")
-
-        # TODO: Add any additional processing here
-        # Drop rows with missing values
-        dataset = dataset.dropna()
-        logging.info(f"Rows with missing values dropped, remaining rows: {len(dataset)}")
-
-        # Convert Birthday to datetime
-        dataset['Birthday'] = pd.to_datetime(dataset['Birthday'], format='%d-%b')
-
-        # Drop unnecessary columns
-        drop_cols = ['Favorite Song', 'Style 1', 'Style 2', 'Color 1', 'Color 2', 'Wallpaper', 'Flooring', 'Furniture List', 'Filename']
-        dataset = dataset.drop(columns=drop_cols)
-        logging.info("Unnecessary columns dropped.")
-
-        return dataset
-    except Exception as e:
-        logging.error(f"Error loading dataset: {e}")
-        return None
-
 def stop_server():
     global server_socket, server_thread, server_running, server_status
     if server_running:
         server_running = False
         close_all_connections()
+        if server_socket:
+            server_socket.close()
+            server_socket = None
+        if server_thread and server_thread.is_alive():
+            server_thread.join()
+            server_thread = None
         server_status.configure(text="Server Status: Stopped", fg_color="red")
         logging.info("Server stopped")
 
 def accept_connections():
-    global server_running, sockets_list
-    try:
-        while server_running:
-            # Check if the server socket is still valid
-            if server_socket is None or server_socket.fileno() == -1:
-                logging.error("Server socket is not valid or already closed.")
-                break
-            read_sockets, _, _ = select.select(sockets_list, [], [], 1)
-            for notified_socket in read_sockets:
-                if notified_socket == server_socket:
-                    if not server_running:  # Additional check for server running status
-                        break
-                    try:
-                        client_socket, client_address = server_socket.accept()
-                        logging.info(f"Connection from {client_address[0]}:{client_address[1]}")
-                        sockets_list.append(client_socket)
-                        clients[client_socket] = {"username": "Unknown", "address": f"{client_address[0]}:{client_address[1]}"}
-                        update_client_list_display()
-                    except Exception as e:
-                        logging.error(f"Error accepting new connection: {e}")
-                else:
-                    process_client_message(notified_socket)
-    except Exception as e:
-        logging.error(f"Server accept loop error: {e}")
-    finally:
-        logging.info("Server accept loop has ended")
+    logging.info("Server accept loop started")
+    global server_running, sockets_list, server_socket, message_queue
+    while server_running:
+        # Check if the server socket is still valid
+        if server_socket is None or server_socket.fileno() == -1:
+            logging.error("Server socket is not valid or already closed.")
+            break
+        read_sockets, _, _ = select.select(sockets_list, [], [], 1)
+        for notified_socket in read_sockets:
+            if notified_socket == server_socket:
+                if not server_running:  # Additional check for server running status
+                    logging.info("Server is no longer running.")
+                    stop_server()    # Stop the server if it's no longer running
+                    break
+                try:
+                    client_socket, client_address = server_socket.accept()
+                    logging.info(f"Connection from {client_address[0]}:{client_address[1]}")
+                    sockets_list.append(client_socket)
+                    # client_thread = threading.Thread(target=handle_client, args=(client_socket,))
+                    # client_thread.start()
+                    # Correctly initialize ClientHandler with client_socket and other necessary parameters
+                    client_handler = ClientHandler(client_socket, client_address, message_queue)
+
+                    # Start the client handler in a new thread
+                    threading.Thread(target=client_handler.accept_connections, daemon=True).start()
+
+                    clients[client_socket] = {"username": "Unknown", "address": f"{client_address[0]}:{client_address[1]}"}
+                    update_client_list_display()
+                except Exception as e:
+                    logging.error(f"Error accepting new connection: {e}")
 
 def close_all_connections():
     global server_socket, server_thread
@@ -278,205 +265,18 @@ def display_message(message):
     message_display.configure(state="disabled")
     message_display.see(ctk.END)
 
-def process_client_message(client_socket):
-    try:
-        message = client_socket.recv(1024)
-        if not message:
-            raise Exception("Client disconnected")
-        # Attempt to deserialize the message
-        try:
-            message = pickle.loads(message)
-        except pickle.PickleError as e:
-            logging.error(f"Pickle error processing message: {e}")
-            return
-
-        # Check if "type" key exists in the message
-        if "type" not in message:
-            # if it not empty, it is a message from the client that should be displayed in the server
-            if message:
-                display_message(f"{clients[client_socket]["username"]}: {message}")
-            return
-        if not message["type"]:
-            logging.error("Message format error: type key missing")
-            return
-
-        # Process message based on type
-        if message["type"] == "login":
-            handle_login(message, client_socket)
-        elif message["type"] == "logout":
-            logging.info(f"Client {clients[client_socket]["username"]} has logged out")
-            # reset the username to "Unknown" 
-            clients[client_socket]["username"] = "Unknown"
-            update_client_list_display()
-            pass
-        elif message["type"] == "request_data_parameters":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested data parameters")
-            handle_request_data_parameters(message, client_socket)
-        elif message["type"] == "register":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested to register")
-            handle_register(message, client_socket)
-        elif message["type"] == "request_bar_graph1":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 1")
-            data_type = message["data_type"]
-            handle_request_bar_graph1(data_type, client_socket)
-        elif message["type"] == "request_bar_graph2":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 2")
-            data_type = message["data_type"]
-            handle_request_bar_graph2(data_type, client_socket)
-        elif message["type"] == "request_bar_graph3":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 3")
-            data_type = message["data_type"]
-            handle_request_bar_graph3(data_type, client_socket)
-        elif message["type"] == "request_search_villagers":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested to search villagers")
-            parameters = message["parameters"]
-            handle_request_search_villagers(parameters, client_socket)
-        else:
-            logging.error(f"Unknown message type: {message["type"]}")
-    except Exception as e:
-        logging.error(f"Error handling message: {e}")
-        remove_client(client_socket)
-
-def handle_request_bar_graph1(data_type, client_socket):
-    # graph data is column name, get the unique values and their counts to send to the client
-    global dataset
-    if dataset is None:
-        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
-        logging.warning("Graph request denied: Dataset not loaded")
-    else:
-        try:
-            # get the unique values and their counts
-            graph_data = dataset[data_type].value_counts()
-            response = {"type": "received_graph1", "status": "success", "graph_data": graph_data}
-        except Exception as e:
-            response = {"type": "received_graph1", "status": "failure", "message": f"Error processing graph data: {e}"}
-            logging.error(f"Error processing graph data: {e}")
-
-    try:
-        client_socket.send(pickle.dumps(response))
-    except Exception as e:
-        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
-
-def handle_request_bar_graph2(data_type, client_socket):
-    global dataset  
-    if dataset is None:
-        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
-        logging.warning("Graph request denied: Dataset not loaded")
-    else:
-        try:
-             # Extract the month from the date column
-            dataset['Month'] = pd.to_datetime(dataset[data_type]).dt.month
-            # Count the number of occurrences of each month
-            graph_data = dataset['Month'].value_counts().sort_index()            
-            response = {"type": "received_graph2", "status": "success", "graph_data": graph_data}
-        except Exception as e:
-            response = {"type": "received_graph2", "status": "failure", "message": f"Error processing graph data: {e}"}
-            logging.error(f"Error processing graph data: {e}")
-    
-    try:
-        client_socket.send(pickle.dumps(response))
-    except Exception as e:
-        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
-        
-def handle_request_bar_graph3(data_type, client_socket):
-    # depending on data_type graph catchphrases by beginning letter, amount of words, and amount of letters.
-    global dataset
-    if dataset is None:
-        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
-        logging.warning("Graph request denied: Dataset not loaded")
-    else:
-        try:
-            if data_type == "Starting letter":
-                # Catchphrases by beginning letter
-                catchphrase_dataset = dataset["Catchphrase"].str[0].str.upper()
-                catchphrase_letter = catchphrase_dataset.value_counts().sort_index()
-                graph_data = catchphrase_letter
-            elif data_type == "Word count":
-                # Catchphrases by amount of words
-                catchphrase_dataset = dataset["Catchphrase"].str.split().str.len()
-                catchphrase_words = catchphrase_dataset.value_counts().sort_index()
-                graph_data = catchphrase_words
-            elif data_type == "Letter count":
-                # Catchphrases by amount of letters
-                catchphrase_dataset = dataset["Catchphrase"].str.len()
-                catchphrase_letters = catchphrase_dataset.value_counts().sort_index()
-                graph_data = catchphrase_letters
-
-            response = {"type": "received_graph3", "status": "success", "graph_data": graph_data, "data_type": data_type}
-        except Exception as e:
-            response = {"type": "received_graph3", "status": "failure", "message": f"Error processing graph data: {e}"}
-            logging.error(f"Error processing graph data: {e}")
-    try:
-        client_socket.send(pickle.dumps(response))
-    except Exception as e:
-        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
-
-
-def handle_request_search_villagers(parameters, client_socket):
-    logging.info(f"Searching villagers with parameters: {parameters}")
-    global dataset
-    if dataset is None:
-        response = {"type": "search_results", "status": "failure", "message": "Dataset not loaded"}
-        logging.warning("Search request denied: Dataset not loaded")
-    else:
-        # using species, birthday, personality and hobby let's filter villagers
-        # if it is none, it means we don't want to filter by that attribute
-        species = parameters.get("species")
-        birthday = parameters.get("birthday")
-        personality = parameters.get("personality")
-        hobby = parameters.get("hobby")
-        filtered_data = dataset
-        if species:
-            filtered_data = filtered_data[filtered_data['Species'] == species]
-        if birthday:
-            filtered_data = filtered_data[filtered_data['Birthday'].dt.strftime('%b') == birthday]
-        if personality:
-            filtered_data = filtered_data[filtered_data['Personality'] == personality]
-        if hobby:
-            filtered_data = filtered_data[filtered_data['Hobby'] == hobby]
-
-        response = {"type": "search_results", "status": "success", "search_results": filtered_data.to_dict(orient="records")}
-    try:
-        client_socket.send(pickle.dumps(response))
-    except Exception as e:
-        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
-
-def handle_request_data_parameters(message, client_socket):
-    global dataset
-    if dataset is None:
-        response = {"type": "data_parameters", "status": "failure", "message": "Dataset not loaded"}
-        logging.warning("Data parameters request denied: Dataset not loaded")
-    else:
-        # get the columns and the unique values for species, personality, and hobby
-        columns = dataset.columns.tolist()
-        species_values = dataset['Species'].unique()
-        personality_values = dataset['Personality'].unique()
-        hobby_values = dataset['Hobby'].unique()
-        # group the values into a dictionary
-        columns_values = {
-            "Species": species_values,
-            "Personality": personality_values,
-            "Hobby": hobby_values
-        }
-        response = {"type": "data_parameters", "status": "success", "columns": columns, "columns_values": columns_values}
-        logging.info("Data parameters sent successfully")
-
-    try:
-        client_socket.send(pickle.dumps(response))
-    except Exception as e:
-        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
-        remove_client(client_socket)
-
 def remove_client(client_socket):
+    print("Removing client")
     with clients_lock:
         if client_socket in sockets_list:
             sockets_list.remove(client_socket)
         client_info = clients.pop(client_socket, None)
         if client_info:
-            logging.info(f"Client {client_info["username"]} at {client_info["address"]} has disconnected")
+            logging.info(f"Client {client_info['username']} at {client_info['address']} has disconnected")
         if client_socket in client_checkboxes:
             checkbox_frame = client_checkboxes.pop(client_socket)
             checkbox_frame.destroy()
+        client_socket.close()
     update_client_list_display()
 
 def update_client_list_display():
@@ -486,6 +286,8 @@ def update_client_list_display():
         username = clients[client_socket]["username"]
         ip_address = clients[client_socket]["address"]
         add_client_checkbox(client_socket, username, ip_address)
+        # if client is connected, send the parameters to the client
+        handle_request_data_parameters(client_socket)
 
 def add_client_checkbox(client_socket, username, ip_address):
     list_text = f"{username} - ({ip_address})"
@@ -510,91 +312,6 @@ def broadcast_message(message, sender_socket=None):
                 except Exception as e:
                     logging.error(f"Error sending message to {clients[client_socket]["username"]}: {e}")
                     remove_client(client_socket)
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def load_credentials():
-    user_credentials = {}
-    credentials_path = "./data/user_credentials.txt"
-    try:
-        if not os.path.exists(credentials_path):
-            with open(credentials_path, "w") as file:
-                logging.info("Credentials file created.")
-        with open(credentials_path, "r") as file:
-            for line in file:
-                if line.strip():
-                    username, hashed_pwd = line.strip().split(",", 1)
-                    user_credentials[username] = hashed_pwd
-    except IOError as e:
-        logging.error(f"Failed to read credentials file: {e}")
-    logging.info(f"Loaded credentials successfully")
-    return user_credentials
-
-def handle_register(message, client_socket):
-    # here we will handle the registration of a new user
-    user_credentials = load_credentials()
-    name = message["name"]
-    username = message["username"]
-    email = message["email"]
-    password = message["password"]
-
-    # check if the username already exists
-    if username in user_credentials:
-        response = {"type": "register_response", "status": "failure", "message": "Username already exists"}
-        logging.warning(f"Registration attempt denied for {username}: Username already exists.")
-    # check if the password is too short, minimum 4 characters
-    elif len(password) < 4:
-        response = {"type": "register_response", "status": "failure", "message": "Password must be at least 4 characters"}
-        logging.warning(f"Registration attempt denied for {username}: Password too short.")
-    # check if the email is valid
-    elif not email or "@" not in email:
-        response = {"type": "register_response", "status": "failure", "message": "Invalid email address"}
-        logging.warning(f"Registration attempt denied for {username}: Invalid email address.")
-    # last check to make sure none of the fields are empty or over 32 characters
-    elif not all(len(field) <= 32 and field for field in [name, username, email]):
-        response = {"type": "register_response", "status": "failure", "message": "Fields must not be empty or over 16 characters"}
-        logging.warning(f"Registration attempt denied for {username}: Fields must not be empty or over 16 characters.")
-    # if all checks pass, we can register the user
-    else:
-        hashed_password = hash_password(password)
-        with open("./data/user_credentials.txt", "a") as file:
-            file.write(f"{username},{hashed_password},{name},{email}\n")
-        response = {"type": "register_response", "status": "success", "message": "Registration successful"}
-        logging.info(f"Registration successful for {username}")
-    try:
-        client_socket.send(pickle.dumps(response))
-    except Exception as e:
-        logging.error(f"Error sending response to {username}: {e}")
-
-
-def handle_login(message, client_socket):
-    user_credentials = load_credentials()
-    username = message["username"]
-    password = message["password"]
-    hashed_password = hash_password(password)
-
-    if username not in user_credentials:
-        response = {"type": "login_response", "status": "failure", "message": "Username not found"}
-        logging.warning(f"Login attempt denied for {username}: Username not found.")
-    elif any(client["username"] == username for client in clients.values()):
-        response = {"type": "login_response", "status": "failure", "message": "User already logged in"}
-        logging.warning(f"Login attempt denied for {username}: User already logged in.")
-    else:
-        stored_hash = user_credentials[username].split(",")[0]  # Splitting to extract just the hash
-        if stored_hash != hashed_password:
-            response = {"type": "login_response", "status": "failure", "message": "Incorrect password"}
-            logging.warning(f"Login attempt denied for {username}: Incorrect password.")
-        else:
-            clients[client_socket]["username"] = username  # Assuming this part is correctly managed elsewhere
-            response = {"type": "login_response", "status": "success", "message": "Login successful for " + username}
-            logging.info(f"Login successful for {username}")
-
-    try:
-        client_socket.send(pickle.dumps(response))
-        update_client_list_display()
-    except Exception as e:
-        logging.error(f"Error sending response to {username}: {e}")
 
 if __name__ == "__main__":
     try:

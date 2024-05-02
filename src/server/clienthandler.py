@@ -1,175 +1,269 @@
-import socket
-import threading
 import pickle
 import logging
+import threading
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-class ClientHandler:
-    def __init__(self, host, port, message_queue):
-        self.host = host
-        self.port = port
-        self.message_queue = message_queue
-        self.client_socket = None
-        self.running = False
-        self.connect_to_server()
+class ClientHandler(threading.Thread):
+    def __init__(self, client_socket, client_address, message_queue, message_recieved_callback=None):
+        self.client_socket = client_socket
+        self.client_address = client_address
+        self.message_queue = message_queue,
+        self.message_recieved_callback = message_recieved_callback,
+        self.running = True
 
-    def send_message(self, data):
-        # don"t send empty messages
-        if not data:
-            return
-        if self.running and self.client_socket:
-            try:
-                serialized_data = pickle.dumps(data)
-                self.client_socket.send(serialized_data)
-                logging.info("Message sent to server")
-            except Exception as e:
-                logging.error(f"Error sending message: {e}")
-                self.handle_disconnection("Failed to send message")
+    def run(self) -> None:
+        # start the client handler
+        self.accept_connections()
 
-    def receive_messages(self):
-        buffer_size = 10096  # adjust as needed
+    def accept_connections(self):
         while self.running:
             try:
-                response = self.client_socket.recv(buffer_size)
-                if not response:
-                    raise ConnectionResetError("Server has closed the connection")
-                response_data = pickle.loads(response)
-                self.handle_response(response_data)
-            except (pickle.UnpicklingError, IndexError) as e:
-                logging.error(f"Data corruption or incomplete data received: {e}")
-                continue
+                # Receive data from the client
+                data = self.client_socket.recv(1024)
+                if data:
+                    # Process the data
+                    self.process_data(data)
+                    self.message_recieved_callback(data)
+                else:
+                    # If no data is received, the client has disconnected
+                    self.running = False
             except Exception as e:
-                logging.error(f"Error receiving message: {e}")
-                self.handle_disconnection(str(e))
-                break
+                logging.error(f"Error receiving data from client {self.client_address}: {e}")
+                self.running = False
 
-    def handle_response(self, response):
-        if "type" not in response:
-            #if not type is is a message from the server
-            self.handle_message(response)
+    # Process the data received from the client
+    def process_data(self, data):
+        # Unpickle the data, if it fails, return an error
+        try:
+            request = pickle.loads(data)    
+            # check if the request is in proper format type and data
+            if 'type' not in request or 'data' not in request:
+                logging.error(f"Invalid request from client {self.client_address}")
+                return
+            else:
+                # send the request to the message queue
+                print("Request sent from handler to server")
+                self.message_queue.put(request)
+        except Exception as e:
+            logging.error(f"Error unpickling data from client {self.client_address}: {e}")
             return
         
-        # rint("Handle_response - clienthandler.py")
-        # print(response)
-
-        if response["type"] == "login_response":
-            status = response.get("status", "failure")
-            message = response.get("message", "No message provided")
-            if status == "success":
-                print("Login successful, updating GUI to show dashboard.")
-                self.message_queue.put(("show_dashboard", message))  # Ensure second value is None if no additional data
-            else:
-                print("Login failed, showing error message.")
-                self.message_queue.put(("login_failed", message))
-        elif response["type"] == "register_response":
-            status = response.get("status", "failure")
-            message = response.get("message", "No message provided")
-            if status == "success":
-                print("Registration successful, updating GUI to show login.")
-                self.message_queue.put(("show_login", None))
-            else:
-                print("Registration failed, showing error message.")
-                self.message_queue.put(("login_failed", message))
-        elif response["type"] == "data_parameters":
-            print("Received data parameters from server.")
-            # need to keep track of the columns
-            columns = response.get("columns", [])
-            # also need to know the unique values for certain columns
-            columns_values = response.get("columns_values", {})
-            # combine the columns and values into a single message
-            parameters = (columns, columns_values)
-
-            self.message_queue.put(("data_parameters", parameters))
-        elif response["type"] == "received_graph1":
-            print("Received graph1 data from server.")
-            logging.info(f"Graph data received: {response.get('graph_data', 'No data provided')}")
-            graph_data = response.get("graph_data", "No data provided")
-            # send the graph data to the GUI to be displayed
-            self.message_queue.put(("display_graph1", graph_data))
-        elif response["type"] == "received_graph2":
-            print("Received graph2 data from server.")
-            logging.info(f"Graph data received: {response.get('graph_data', 'No data provided')}")
-            graph_data = response.get("graph_data", "No data provided")
-            # send the graph data to the GUI to be displayed
-            self.message_queue.put(("display_graph2", graph_data))
-        elif response["type"] == "received_graph3":
-            print("Received graph3 data from server.")
-            logging.info(f"Graph data received: {response.get('graph_data', 'No data provided')}")
-            graph_data = response.get("graph_data", "No data provided")
-            data_type = response.get("data_type", "No data type provided")
-            # send the graph data to the GUI to be displayed
-            self.message_queue.put(("display_graph3", graph_data, data_type))
-        elif response["type"] == "search_results":
-            print("Received search villagers data from server.")
-            search_results = response.get("search_results", "No data provided")
-            # send the search results to the GUI to be displayed
-            self.message_queue.put(("display_search_results", search_results))
-        else:
-            self.handle_error(response)
-
-    def handle_error(self, response):
-        logging.error(f"Error from server: {response["message"]}")
-        self.message_queue.put(("error", response["message"]))
-        
-    def handle_disconnection(self, reason="Unknown reason"):
-        if self.running:
-            logging.error(f"Disconnection because: {reason}")
-            self.close_connection()
-            self.message_queue.put(("connection_error", f"Disconnected: {reason}"))
-
-    def handle_message(self, message):
-        self.message_queue.put(("message", message))
-
-    def close_connection(self):
-        self.running = False
+    # Send a response back to the client
+    def send_response(self, response):
         try:
-            if self.client_socket:
-                self.client_socket.shutdown(socket.SHUT_RDWR)
-                self.client_socket.close()
+            # Pickle the response
+            response_data = pickle.dumps(response)
+            # Send the response to the client
+            self.client_socket.send(response_data)
         except Exception as e:
-            logging.error(f"Error closing socket: {e}")
-        finally:
-            self.client_socket = None
-            self.message_queue.put(("connection_closed", "Connection to server closed."))
+            logging.error(f"Error sending response to client {self.client_address}: {e}")
+        
 
-    def connect_to_server(self):
+
+
+
+
+
+    def handle_client(client_socket):
+        global message_queue
+        while True:
+            try:
+                message = message_queue.get()
+                if not message:
+                    # if no message is received, the client has disconnected
+                    remove_client(client_socket)
+                    break
+
+
+                # Process the message here
+                # Unpickle the message
+
+                # Check the type of message
+                if message["type"] == "user_login":
+                    handle_login(message["data"], client_socket)
+                elif message["type"] == "user_register":
+                    handle_register(message["data"], client_socket)
+                elif message["type"] == "user_logout":
+                    print("User logout request received")
+                    remove_client(client_socket)
+                elif message["type"] == "request_bar_graph1":
+                    handle_request_bar_graph1(message["data"], client_socket)
+                elif message["type"] == "request_bar_graph2":
+                    handle_request_bar_graph2(message["data"], client_socket)
+                elif message["type"] == "request_bar_graph3":
+                    handle_request_bar_graph3(message["data"], client_socket)
+                elif message["type"] == "request_search_villagers":
+                    handle_request_search_villagers(message["data"], client_socket)
+                elif message["type"] == "request_data_parameters":
+                    print("Data parameters request received")
+
+            except ConnectionResetError:
+                logging.error("ConnectionResetError: Client disconnected unexpectedly")
+                remove_client(client_socket)
+                break
+
+    def read_dataset():
+    global dataset
+    # Load the dataset from the file 
+    try:
+        dataset = pd.read_csv("./data/Animal_Crossing_Villagers.csv", dtype={
+            'Name': 'str', 'Species': 'str', 'Gender': 'str', 'Personality': 'str', 'Hobby': 'str'
+        })
+        logging.info("Dataset loaded successfully")
+
+        # TODO: Add any additional processing here
+        # Drop rows with missing values
+        dataset = dataset.dropna()
+        logging.info(f"Rows with missing values dropped, remaining rows: {len(dataset)}")
+
+        # Convert Birthday to datetime
+        dataset['Birthday'] = pd.to_datetime(dataset['Birthday'], format='%d-%b')
+
+        # Drop unnecessary columns
+        drop_cols = ['Favorite Song', 'Style 1', 'Style 2', 'Color 1', 'Color 2', 'Wallpaper', 'Flooring', 'Furniture List', 'Filename']
+        dataset = dataset.drop(columns=drop_cols)
+        logging.info("Unnecessary columns dropped.")
+
+        return dataset
+    except Exception as e:
+        logging.error(f"Error loading dataset: {e}")
+        return None
+    
+
+
+
+    def handle_request_bar_graph1(data_type, client_socket):
+    # graph data is column name, get the unique values and their counts to send to the client
+    global dataset
+    if dataset is None:
+        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
+        logging.warning("Graph request denied: Dataset not loaded")
+    else:
         try:
-            self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_socket.connect((self.host, self.port))
-            self.running = True
-            thread = threading.Thread(target=self.receive_messages, daemon=True)
-            thread.start()
-            self.message_queue.put(("connection_success", "Connected to server"))
-            # request the data parameters from the server
-            self.request_data()
-        except socket.error as e:
-            self.running = False
-            logging.error(f"Failed to connect to server: {e}")
-            self.message_queue.put(("connection_error", "Failed to connect to server."))
+            # get the unique values and their counts
+            graph_data = dataset[data_type].value_counts()
+            response = {"type": "received_graph1", "status": "success", "graph_data": graph_data}
+        except Exception as e:
+            response = {"type": "received_graph1", "status": "failure", "message": f"Error processing graph data: {e}"}
+            logging.error(f"Error processing graph data: {e}")
 
-    def login(self, username, password):
-        self.send_message({"type": "login", "username": username, "password": password})
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
 
-    def register(self, name, username, email, password):
-        self.send_message({"type": "register", "name": name, "username": username, "email": email, "password": password})
+def handle_request_bar_graph2(data_type, client_socket):
+    global dataset  
+    if dataset is None:
+        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
+        logging.warning("Graph request denied: Dataset not loaded")
+    else:
+        try:
+             # Extract the month from the date column
+            dataset['Month'] = pd.to_datetime(dataset[data_type]).dt.month
+            # Count the number of occurrences of each month
+            graph_data = dataset['Month'].value_counts().sort_index()            
+            response = {"type": "received_graph2", "status": "success", "graph_data": graph_data}
+        except Exception as e:
+            response = {"type": "received_graph2", "status": "failure", "message": f"Error processing graph data: {e}"}
+            logging.error(f"Error processing graph data: {e}")
+    
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
+        
+def handle_request_bar_graph3(data_type, client_socket):
+    # depending on data_type graph catchphrases by beginning letter, amount of words, and amount of letters.
+    global dataset
+    if dataset is None:
+        response = {"type": "graph", "status": "failure", "message": "Dataset not loaded"}
+        logging.warning("Graph request denied: Dataset not loaded")
+    else:
+        try:
+            if data_type == "Starting letter":
+                # Catchphrases by beginning letter
+                catchphrase_dataset = dataset["Catchphrase"].str[0].str.upper()
+                catchphrase_letter = catchphrase_dataset.value_counts().sort_index()
+                graph_data = catchphrase_letter
+            elif data_type == "Word count":
+                # Catchphrases by amount of words
+                catchphrase_dataset = dataset["Catchphrase"].str.split().str.len()
+                catchphrase_words = catchphrase_dataset.value_counts().sort_index()
+                graph_data = catchphrase_words
+            elif data_type == "Letter count":
+                # Catchphrases by amount of letters
+                catchphrase_dataset = dataset["Catchphrase"].str.len()
+                catchphrase_letters = catchphrase_dataset.value_counts().sort_index()
+                graph_data = catchphrase_letters
 
-    def logout(self):  
-        self.send_message({"type": "logout"})
+            response = {"type": "received_graph3", "status": "success", "graph_data": graph_data, "data_type": data_type}
+        except Exception as e:
+            response = {"type": "received_graph3", "status": "failure", "message": f"Error processing graph data: {e}"}
+            logging.error(f"Error processing graph data: {e}")
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
 
-    def request_data(self):
-        self.send_message({"type": "request_data_parameters"})
 
-    def request_bar_graph1(self, data_type):
-        self.send_message({"type": "request_bar_graph1", "data_type": data_type})
+def handle_request_search_villagers(parameters, client_socket):
+    logging.info(f"Searching villagers with parameters: {parameters}")
+    global dataset
+    if dataset is None:
+        data = {"status": "failure", "message": "Dataset not loaded"}
+        logging.warning("Data parameters request denied: Dataset not loaded")
+    else:
+        columns = dataset.columns.tolist()
+        species_values = dataset['Species'].unique()
+        personality_values = dataset['Personality'].unique()
+        hobby_values = dataset['Hobby'].unique()
 
-    def request_bar_graph2(self, data_type):
-        self.send_message({"type": "request_bar_graph2", "data_type": data_type})
+        columns_values = {
+            "Species": species_values,
+            "Personality": personality_values,
+            "Hobby": hobby_values
+        }
 
-    def request_bar_graph3(self, data_type):
-        self.send_message({"type": "request_bar_graph3", "data_type": data_type})
+        data = {"status": "success", "columns": columns, "columns_values": columns_values}
+        logging.info("Data parameters sent successfully")
 
-    def request_search_villagers(self, species, personality, hobby):
-        parameters = {"species": species, "personality": personality, "hobby": hobby}
-        self.send_message({"type": "request_search_villagers", "parameters": parameters})
+    response = {"type": "data_parameters", "data": data}
+
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]['username']}: {e}")
+        remove_client(client_socket)
+
+def handle_request_data_parameters(client_socket):
+    global dataset
+    if dataset is None:
+        data = {"status": "failure", "message": "Dataset not loaded"}
+        response = {"type": "data_parameters", "data": data}
+        logging.warning("Data parameters request denied: Dataset not loaded")
+    else:
+        # get the columns and the unique values for species, personality, and hobby
+        columns = dataset.columns.tolist()
+        species_values = dataset['Species'].unique()
+        personality_values = dataset['Personality'].unique()
+        hobby_values = dataset['Hobby'].unique()
+        # group the values into a dictionary
+        columns_values = {
+            "Species": species_values,
+            "Personality": personality_values,
+            "Hobby": hobby_values
+        }
+        data = {
+            "columns": columns,
+            "columns_values": columns_values
+        }
+        response = {"type": "data_parameters", "data": data}
+        logging.info("Data parameters sent successfully")
+    try:
+        client_socket.send(pickle.dumps(response))
+    except Exception as e:
+        logging.error(f"Error sending response to {clients[client_socket]['username']}: {e}")
+        remove_client(client_socket)

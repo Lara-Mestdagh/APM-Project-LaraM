@@ -1,6 +1,6 @@
 TODO:
-- get text request working, open table in screen
 - make the history logging work
+- Clienthandler should be in server, right now client can access dataset
 
 
 Planned possibilities:
