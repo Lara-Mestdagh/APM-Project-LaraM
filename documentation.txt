@@ -32,3 +32,5 @@ the 3rd graph was a bit more work, I had to rework my update_gui to take 3 argum
 
 Lastly you can select the options for species, personality and hobby to filter the dataset. This opens a customtinker top level with a table inside
 filled with the result of the search. if a parameter is left empty it does not apply.
+
+I realised a terrible mistake way too late to fix it properly so right now the clienthandler is part of the client code, not the server.

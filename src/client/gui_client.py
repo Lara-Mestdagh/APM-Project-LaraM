@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from ..server.clienthandler import ClientHandler
+from clienthandler import ClientHandler
 
 
 # Setup logging configuration
@@ -311,7 +311,6 @@ def update_gui():
             elif command == "data_parameters":
                 print("Data parameters received")
                 handle_data_parameters(args[0] if args else {})
-                print(args[0] if args else "No data")
             elif command == "graph_data":
                 print("Graph data received")
             elif command == "display_graph1":

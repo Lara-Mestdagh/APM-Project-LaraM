@@ -1,9 +1,0 @@
-setuptools
-cryptography
-pandas
-flask
-matplotlib
-plotly
-python-dotenv
-socket
-tkinter
