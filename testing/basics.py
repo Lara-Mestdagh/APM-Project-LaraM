@@ -7,30 +7,18 @@ import matplotlib.pyplot as plt
 file_path = "./data/Animal_Crossing_Villagers.csv"
 villagers_data = pd.read_csv(file_path)
 
-# Graphs showing all catchphrases by beginning letter, amount of words, and amount of letters.
-# Catchphrases by beginning letter
-catchphrase_letter = villagers_data["Catchphrase"].str[0].str.upper()
-catchphrase_letter = catchphrase_letter.value_counts().sort_index()
-catchphrase_letter.plot(kind="bar")
-plt.title("Catchphrases by beginning letter")
-plt.xlabel("Letter")
-plt.ylabel("Amount")
-plt.show()
+# using species, birthday, personality and hobby let's filter villagers
+# if it is none, it means we don't want to filter by that attribute
 
-# Catchphrases by amount of words
-catchphrase_words = villagers_data["Catchphrase"].str.split().str.len()
-catchphrase_words = catchphrase_words.value_counts().sort_index()
-catchphrase_words.plot(kind="bar")
-plt.title("Catchphrases by amount of words")
-plt.xlabel("Amount of words")
-plt.ylabel("Amount")
-plt.show()
+def filter_villagers(species=None, birthday=None, personality=None, hobby=None):
+    filtered_data = villagers_data
+    if species:
+        filtered_data = filtered_data[filtered_data['Species'] == species]
+    if birthday:
+        filtered_data = filtered_data[filtered_data['Birthday'].str.contains(birthday)]
+    if personality:
+        filtered_data = filtered_data[filtered_data['Personality'] == personality]
+    if hobby:
+        filtered_data = filtered_data[filtered_data['Hobby'] == hobby]
+    return filtered_data
 
-# Catchphrases by amount of letters
-catchphrase_letters = villagers_data["Catchphrase"].str.len()
-catchphrase_letters = catchphrase_letters.value_counts().sort_index()
-catchphrase_letters.plot(kind="bar")
-plt.title("Catchphrases by amount of letters")
-plt.xlabel("Amount of letters")
-plt.ylabel("Amount")
-plt.show()
