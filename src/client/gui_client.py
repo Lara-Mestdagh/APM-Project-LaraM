@@ -2,6 +2,7 @@ import customtkinter as ctk
 import tkinter.messagebox as msgbox
 import queue
 import time
+import datetime
 import logging
 import pandas as pd
 import numpy as np
@@ -60,6 +61,7 @@ def send_message_and_clear():
 
 def show_dashboard():
     global message_display, message_input, username, request1_dropdown, request3_dropdown
+    global request4_species, request4_personality, request4_hobby
     clear_window()
     app.geometry("1000x750")
     title = ctk.CTkLabel(master=app, text=f"Dashboard - {username}", font=("Arial", 16, "bold"))
@@ -125,12 +127,8 @@ def show_dashboard():
 
     # using global variables to store the possible values for the columns
     # species, personality, and hobby
-    request4_race = ctk.CTkOptionMenu(master=request4_frame, values=species)
-    request4_race.pack(side="left", padx=10)
-
-    # for birthday, we can use a date picker
-    request4_birthday = DateEntry(request4_frame, width=12, background='darkblue', foreground='white', borderwidth=2)
-    request4_birthday.pack(side="left", padx=10)
+    request4_species = ctk.CTkOptionMenu(master=request4_frame, values=species)
+    request4_species.pack(side="left", padx=10)
 
     request4_personality = ctk.CTkOptionMenu(master=request4_frame, values=personality)
     request4_personality.pack(side="left", padx=10)
@@ -188,6 +186,74 @@ def show_bar_graph2(graph_data):
     plt.ylabel('Month')
     plt.show()
 
+def show_bar_graph3(graph_data, title):
+    # Graphs showing all catchphrases by beginning letter, amount of words, and amount of letters.
+    data = graph_data
+
+    # Create a bar plot of the data
+    if title == "Starting letter":
+        data.plot(kind='barh', color=['blue'])
+        plt.title('Catchphrases by beginning letter')
+        plt.xlabel('Amount')
+        plt.ylabel('Letter')
+        plt.show()
+    elif title == "Word count":
+        data.plot(kind='barh', color=['blue'])
+        plt.title('Catchphrases by amount of words')
+        plt.xlabel('Amount')
+        plt.ylabel('Amount of words')
+        plt.show()
+    elif title == "Letter count":
+        data.plot(kind='barh', color=['blue'])
+        plt.title('Catchphrases by amount of letters')
+        plt.xlabel('Amount')
+        plt.ylabel('Amount of letters')
+        plt.show()
+
+def show_village_results(results):
+    # Create the top-level window
+    table_result_window = ctk.CTkToplevel(app)
+    table_result_window.title("Search Results")
+    table_result_window.geometry("800x400")
+
+    # Create a scrollable frame using CTkScrollableFrame
+    scrollable_frame = ctk.CTkScrollableFrame(master=table_result_window)
+    scrollable_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    # Create header labels
+    headers = ["Name", "Species", "Gender", "Personality", "Hobby", "Birthday", "Catchphrase", "Unique Entry ID"]
+    for i, header in enumerate(headers):
+        header_label = ctk.CTkLabel(master=scrollable_frame, text=header)
+        header_label.grid(row=0, column=i, sticky='ew', padx=5, pady=5)
+
+    # Quick check if the results are empty
+    if not results:
+        no_results_label = ctk.CTkLabel(master=scrollable_frame, text="No results found.")
+        no_results_label.grid(row=1, column=0, columnspan=len(headers), sticky='ew', padx=5, pady=5)
+        return
+
+    # Populate the table with data
+    for row_index, entry in enumerate(results, start=1):
+        for col_index, key in enumerate(headers):
+            value = entry.get(key, "N/A")  # Handle missing keys gracefully
+            if key == "Birthday" and value != "N/A":  # Check if the key is 'Birthday' and value is not "N/A"
+                if isinstance(value, pd.Timestamp):  # Check if the value is a Timestamp
+                    value = value.strftime("%d-%B")  # Format the date to 'dd-mmmm'
+                else:
+                    try:
+                        # Attempt to parse and format if not a Timestamp but is a string
+                        date_obj = datetime.datetime.strptime(str(value), "%Y-%m-%d %H:%M:%S")
+                        value = date_obj.strftime("%d-%B")  # Format the date to 'dd-mmmm'
+                    except ValueError:
+                        value = "Invalid date"  # Handle cases where the date format is wrong
+
+            cell_label = ctk.CTkLabel(master=scrollable_frame, text=value)
+            cell_label.grid(row=row_index, column=col_index, sticky='ew', padx=5, pady=5)
+
+    # Button to close the window
+    close_button = ctk.CTkButton(table_result_window, text="Close", command=table_result_window.destroy)
+    close_button.pack(pady=10)
+
 def handle_request1():
     # get the selected value from the dropdown
     data_type = request1_dropdown.get()
@@ -206,24 +272,34 @@ def handle_request3():
     # get the selected value from the dropdown
     data_type = request3_dropdown.get()
     # send the request to the clienthandler
-    # client_handler.send_message({"type": "request_graph", "data_type": data_type})
     client_handler.request_bar_graph3(data_type)
     logging.info(f"Graph request sent, type {data_type}")
 
 def handle_request4():
-    print("Request 4")
+    # get species, name, birthday, personality, and hobby from the dropdowns and date picker
+    # check if the values are empty strings and replace them with None
+    species = request4_species.get() if request4_species.get() != "" else None
+    personality = request4_personality.get() if request4_personality.get() != "" else None
+    hobby = request4_hobby.get() if request4_hobby.get() != "" else None
+
+    # send the request to the clienthandler
+    client_handler.request_search_villagers(species, personality, hobby)
+    logging.info(f"Search request sent, species: {species}, personality: {personality}, hobby: {hobby}")
 
 def update_gui():
     global message_display, username
     while not message_queue.empty():
         try:
-            command, data = message_queue.get_nowait()
+            entry = message_queue.get_nowait()
+            command = entry[0]  # Always expect the first element to be the command
+            # The rest are arguments, if any
+            args = entry[1:] if len(entry) > 1 else []
+
             if command == "show_dashboard":
-                # get the username from the message
-                username = data.split()[-1]
+                username = args[0].split()[-1] if args else "Unknown"
                 show_dashboard()
             elif command == "login_failed":
-                msgbox.showwarning("Login Failed", data if data else "Unknown error")
+                msgbox.showwarning("Login Failed", args[0] if args else "Unknown error")
             elif command == "connection_error":
                 show_retry_connection()
             elif command == "connection_success":
@@ -233,30 +309,37 @@ def update_gui():
             elif command == "show_login":
                 show_login()
             elif command == "login_failed":
-                logging.error(f"Login failed: {data}")
-            # get parameters from the message
+                logging.error(f"Login failed: {args[0] if args else 'No data provided'}")
             elif command == "data_parameters":
                 print("Data parameters received")
-                # add a function to handle the data parameters
-                handle_data_parameters(data)
-                print(data)
+                handle_data_parameters(args[0] if args else {})
+                print(args[0] if args else "No data")
             elif command == "graph_data":
                 print("Graph data received")
             elif command == "display_graph1":
                 print("Display graph1")
-                show_bar_graph1(data)     
+                show_bar_graph1(args[0] if args else {})
             elif command == "display_graph2":
                 print("Display graph2")
-                show_bar_graph2(data)           
-            # if the command is empty, it is a message from the server
+                show_bar_graph2(args[0] if args else {})
+            elif command == "display_graph3":
+                print("Display graph3")
+                if len(args) >= 2:
+                    show_bar_graph3(args[0], args[1])
+                else:
+                    logging.error("Not enough data provided for graph3")
+            elif command == "display_search_results":
+                print("Display search villagers")
+                results = args[0] if args else {}
+                show_village_results(results)
             elif command == "message":
-                show_message(f"server: {data}")
+                show_message(f"server: {args[0] if args else 'No message'}")
             else:
-                logging.error(f"Unhandled command: {command}")
+                logging.error(f"Unhandled command in client: {command}")
         except ValueError as e:
-            logging.error(f"Queue message unpacking error: {e}")
+            logging.error(f"Queue message unpacking error in client: {e}")
         except Exception as e:
-            logging.error(f"General error processing GUI update: {e}")
+            logging.error(f"General error processing GUI update in client: {e}")
     app.after(100, update_gui)
 
 def logout():
