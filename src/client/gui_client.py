@@ -88,6 +88,17 @@ def show_dashboard():
     request1_button = ctk.CTkButton(master=request1_frame, text="Graph", command=handle_request1)
     request1_button.pack(side="right", padx=10)
 
+    # - Show the amount of birthdays per month.
+    # request 2
+    request2_frame = ctk.CTkFrame(master=requests_frame)
+    request2_frame.pack(pady=10, fill="both", expand=True)
+
+    request2_label = ctk.CTkLabel(master=request2_frame, text="Graph the amount of birthdays per month.")
+    request2_label.pack(side="left", padx=10)
+
+    request2_button = ctk.CTkButton(master=request2_frame, text="Graph", command=handle_request2)
+    request2_button.pack(side="right", padx=10)
+
     # - Graph showing all catchphrases by beginning letter, amount of words, and amount of letters.
     # request 3
     request3_frame = ctk.CTkFrame(master=requests_frame)
@@ -101,17 +112,6 @@ def show_dashboard():
 
     request3_button = ctk.CTkButton(master=request3_frame, text="Graph", command=handle_request3)
     request3_button.pack(side="right", padx=10)
-
-    # - Show the amount of birthdays per month.
-    # request 2
-    request2_frame = ctk.CTkFrame(master=requests_frame)
-    request2_frame.pack(pady=10, fill="both", expand=True)
-
-    request2_label = ctk.CTkLabel(master=request2_frame, text="Graph the amount of birthdays per month.")
-    request2_label.pack(side="left", padx=10)
-
-    request2_button = ctk.CTkButton(master=request2_frame, text="Graph", command=handle_request2)
-    request2_button.pack(side="right", padx=10)
 
     # - Search all villagers by filtering by race, personality, birthday, and hobby.
     # use a dropdown to select race, personality, and hobby, if left blank, show all villagers for that category

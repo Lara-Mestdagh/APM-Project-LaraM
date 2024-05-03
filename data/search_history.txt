@@ -1,2 +1,12 @@
-lara,Species
-lara,Birthday
+user,request_bar_graph1
+user,request_bar_graph3
+user,request_search_villagers
+user,request_search_villagers
+user,request_bar_graph2
+user,request_bar_graph3
+user,request_bar_graph1
+user,request_search_villagers
+user,request_search_villagers
+lara,request_bar_graph1
+lara,request_bar_graph3
+lara,request_bar_graph2

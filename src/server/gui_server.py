@@ -237,44 +237,108 @@ def request_details():
             else:
                 logging.warning(f"No details found for {username}")
 
+def show_search_history_in_window(search_data):
+    # Create a top-level window
+    search_result_window = ctk.CTkToplevel(app)
+    search_result_window.title("Search History")
+    search_result_window.geometry("500x600")  # Adjust size as needed
+
+    # create a scrollable frame for the search history
+    scroll_frame = ctk.CTkScrollableFrame(master=search_result_window)
+    scroll_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    # Loop over the search data and display it in the scrollable frame
+    for username, searches in search_data.items():
+        username_label = ctk.CTkLabel(master=scroll_frame, text=f"Search history for {username}", font=("Arial", 12, "bold"))
+        username_label.pack(pady=5)
+        for search in searches:
+            search_label = ctk.CTkLabel(master=scroll_frame, text=search)
+            search_label.pack(pady=2)
+
+    # add a close button to the window
+    close_button = ctk.CTkButton(master=search_result_window, text="Close", command=search_result_window.destroy)
+    close_button.pack(pady=10)
+
 def request_search_history():
-    global search_history
+    global search_history, clients, client_checkboxes
     search_history = load_search_history()
-    # for now log if the request was made for all clients or selected clients
+
+    # Get the selected clients and display their search history
     selected_clients = [client_socket for client_socket, checkbox_frame in client_checkboxes.items() if checkbox_frame.winfo_children()[0].get() == 1]
 
-    if len(selected_clients) == 0:
-        logging.info("Search history requested for all clients")
-        # show the entire search history
-        for username, searches in search_history.items():
-            for search in searches:
-                logging.info(f"Search history for {username}: {search}")
-    else:
-        # show the search history for the selected clients
-        logging.info("Search history requested for selected clients")
-        for client_socket in selected_clients:
-            username = clients[client_socket]["username"]
-            searches = search_history.get(username, ["No search history"])
-            for search in searches:
-                logging.info(f"Search history for {username}: {search}")
+    search_data_to_display = {}
+
+    try:
+        # If no clients are selected, display all search history
+        if len(selected_clients) == 0:
+            search_data_to_display = search_history
+        else:
+            # Show search history for selected clients
+            for client_socket in selected_clients:
+                username = clients[client_socket]["username"]
+                if username in search_history:
+                    search_data_to_display[username] = search_history[username]
+                else:
+                    search_data_to_display[username] = ["No search history found"]
+
+        # Display the search history in a CTkToplevel window
+        show_search_history_in_window(search_data_to_display)
+
+    except Exception as e:
+        logging.error(f"Error processing search history: {e}")
+
+
+    
 
 def write_to_search_history(username, search):
     logging.info(f"Writing search history for {username}: {search}")
-    global search_history
-    # add the search to the search history
+    logging.debug(f"Type of search content: {type(search)}, Content: {search}")
+    
+    # Print the search history before updating it
+    logging.debug(f"Search history before: {search_history}")
+    
+    # Add the search to the search history
     if username in search_history:
-        search_history[username].append(search)
+        if isinstance(search_history[username], list):
+            search_history[username].append(search)
+        else:
+            search_history[username] = [search]
     else:
         search_history[username] = [search]
-    # write the search history to the file
+    
+    # Print the search history after updating it
+    logging.debug(f"Search history after: {search_history}")
+    
+    # Write the search history to the file
     search_history_path = "./data/search_history.txt"
     try:
         with open(search_history_path, "w") as file:
-            for username, searches in search_history.items():
-                for search in searches:
-                    file.write(f"{username},{search}\n")
+            for user, searches in search_history.items():
+                for each_search in searches:
+                    file.write(f"{user},{each_search}\n")
     except IOError as e:
-        logging.error(f"Failed to write search history file: {e}")
+        logging.error(f"Failed to write to file: {e}")
+
+
+
+
+
+# def add_search_to_history(username, searchname):
+#     global search_history
+#     if username in search_history:
+#         search_history[username].append(searchname)
+#     else:
+#         search_history[username] = [searchname]
+
+
+
+
+
+
+
+
+
+
     
 
 def on_send():
@@ -340,23 +404,27 @@ def process_client_message(client_socket):
             logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 1")
             data_type = message["data_type"]
             handle_request_bar_graph1(data_type, client_socket)
+            write_to_search_history(clients[client_socket]["username"], "request_bar_graph1")
         elif message["type"] == "request_bar_graph2":
             logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 2")
             data_type = message["data_type"]
             handle_request_bar_graph2(data_type, client_socket)
+            write_to_search_history(clients[client_socket]["username"], "request_bar_graph2")
         elif message["type"] == "request_bar_graph3":
             logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 3")
             data_type = message["data_type"]
             handle_request_bar_graph3(data_type, client_socket)
+            # logging.info(f"Client {clients
+            write_to_search_history(clients[client_socket]["username"], "request_bar_graph3")
         elif message["type"] == "request_search_villagers":
             logging.info(f"Client {clients[client_socket]["username"]} has requested to search villagers")
             parameters = message["parameters"]
             handle_request_search_villagers(parameters, client_socket)
+            write_to_search_history(clients[client_socket]["username"], "request_search_villagers")
         else:
             logging.error(f"Unknown message type: {message["type"]}")
     except Exception as e:
         logging.error(f"Error handling message: {e}")
-        remove_client(client_socket)
 
 def handle_request_bar_graph1(data_type, client_socket):
     # graph data is column name, get the unique values and their counts to send to the client
@@ -369,7 +437,6 @@ def handle_request_bar_graph1(data_type, client_socket):
             # get the unique values and their counts
             graph_data = dataset[data_type].value_counts()
             response = {"type": "received_graph1", "status": "success", "graph_data": graph_data}
-            write_to_search_history(clients[client_socket]["username"], data_type)
         except Exception as e:
             response = {"type": "received_graph1", "status": "failure", "message": f"Error processing graph data: {e}"}
             logging.error(f"Error processing graph data: {e}")
@@ -391,7 +458,6 @@ def handle_request_bar_graph2(data_type, client_socket):
             # Count the number of occurrences of each month
             graph_data = dataset['Month'].value_counts().sort_index()            
             response = {"type": "received_graph2", "status": "success", "graph_data": graph_data}
-            write_to_search_history(clients[client_socket]["username"], data_type)
         except Exception as e:
             response = {"type": "received_graph2", "status": "failure", "message": f"Error processing graph data: {e}"}
             logging.error(f"Error processing graph data: {e}")
@@ -426,7 +492,6 @@ def handle_request_bar_graph3(data_type, client_socket):
                 graph_data = catchphrase_letters
 
             response = {"type": "received_graph3", "status": "success", "graph_data": graph_data, "data_type": data_type}
-            write_to_search_history(clients[client_socket]["username"], data_type)
         except Exception as e:
             response = {"type": "received_graph3", "status": "failure", "message": f"Error processing graph data: {e}"}
             logging.error(f"Error processing graph data: {e}")
@@ -460,7 +525,6 @@ def handle_request_search_villagers(parameters, client_socket):
             filtered_data = filtered_data[filtered_data['Hobby'] == hobby]
 
         response = {"type": "search_results", "status": "success", "search_results": filtered_data.to_dict(orient="records")}
-        write_to_search_history(clients[client_socket]["username"], "request_search_villagers")
     try:
         client_socket.send(pickle.dumps(response))
     except Exception as e:
@@ -563,6 +627,7 @@ def load_credentials():
     return user_credentials
 
 def load_search_history():
+    global search_history_path
     search_history_path = "./data/search_history.txt"
     search_history = {}
     try:
@@ -573,11 +638,15 @@ def load_search_history():
             for line in file:
                 if line.strip():
                     username, search = line.strip().split(",", 1)
-                    search_history[username] = search
+                    if username in search_history:
+                        search_history[username].append(search)
+                    else:
+                        search_history[username] = [search]
     except IOError as e:
         logging.error(f"Failed to read search history file: {e}")
     logging.info(f"Loaded search history successfully")
     return search_history
+
 
 def handle_register(message, client_socket):
     # here we will handle the registration of a new user
