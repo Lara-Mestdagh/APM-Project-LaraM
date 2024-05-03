@@ -719,9 +719,12 @@ def handle_login(message, client_socket):
 
 
 # ================= Main Function ================
-if __name__ == "__main__":
+def main():
     try:
         app = create_server_gui()       # Create the server GUI
         app.mainloop()                  # Start the GUI main loop
     except Exception as e:
         logging.error(f"Failed to start the GUI: {e}")
+
+if __name__ == "__main__":
+    main()

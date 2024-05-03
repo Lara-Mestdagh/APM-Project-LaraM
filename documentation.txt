@@ -40,3 +40,5 @@ user history as well.
 
 Finally I went over my code to order it in a logical send en make sure there were comments to my liking. I also double check that no code is unused
 and I have good naming coneventions.
+
+final quick thing is adding a requirements.txt and a start.py which will start the server, clients will be started in a seperate terminal 
