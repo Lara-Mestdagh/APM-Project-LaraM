@@ -5,8 +5,10 @@ import seaborn as sns
 class Dataset:
     def __init__(self, file_path):
         self.dataset = pd.read_csv(file_path, dtype={
-            'Name': 'str', 'Species': 'str', 'Gender': 'str', 'Personality': 'str', 'Hobby': 'str'})
+            'Name': 'str', 'Species': 'str', 'Gender': 'str', 'Personality': 'str', 'Hobby': 'str'})        
+            # Make sure these are read as string
         print(f"Initial dataset shape: {self.dataset.shape}")
+
 
     def preprocess_data(self):
         # Check for a large number of empty rows before removing
@@ -36,12 +38,16 @@ class Dataset:
         print(f"Final dataset shape after preprocessing: {self.dataset.shape}")
         return self.dataset
 
+
+    # A heatmap of the Species and Personality
     def species_personality_heatmap(self):
         species_personality = pd.crosstab(self.dataset['Species'], self.dataset['Personality'])
         sns.heatmap(species_personality, cmap='coolwarm')
         plt.title('Species and Personality')
         plt.show()
 
+
+    # A boxplot of the Species vs Personality
     def analyze_boxplots(self):
         sns.boxplot(x='Species', y='Personality', data=self.dataset)
         plt.title('Boxplot of Species vs Personality')

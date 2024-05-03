@@ -13,3 +13,4 @@ lara,request_bar_graph2
 lara,request_bar_graph1
 lara,request_bar_graph2
 lara,request_search_villagers
+bobby,request_bar_graph1

@@ -8,13 +8,12 @@ import pickle
 import os
 import logging
 import pandas as pd
-
 from datasetpre import Dataset
-
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Global variables
 HOST = "localhost"
 PORT = 5000
 
@@ -28,7 +27,9 @@ clients_lock = Lock()
 user_credentials = {}
 search_history = {}
 
-def create_server_gui():
+
+# ================ GUI Functions ================
+def create_server_gui():    
     global clients_frame, message_input, message_display, app, server_status
 
     # Create the main app window
@@ -102,13 +103,84 @@ def create_server_gui():
 
     return app  # Return the created app object
 
-def update_server_status(status):
-    global server_status
-    # Update the server status label with the provided status
-    # Set the color to green if the server is running, red if stopped
-    color = "green" if status == "Running" else "red"
-    server_status.configure(text=f"Server Status: {status}", fg_color=("white", color))
 
+def show_search_history_in_window(search_data):
+    # Create a top-level window
+    search_result_window = ctk.CTkToplevel(app)
+    search_result_window.title("Search History")
+    search_result_window.geometry("500x600")  # Adjust size as needed
+
+    # create a scrollable frame for the search history
+    scroll_frame = ctk.CTkScrollableFrame(master=search_result_window)
+    scroll_frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    # Loop over the search data and display it in the scrollable frame
+    for username, searches in search_data.items():
+        # Create a frame for each user
+        user_frame = ctk.CTkFrame(master=scroll_frame)
+        user_frame.pack(fill="x", pady=5)
+
+        # Create a label for the username with a larger font size
+        username_label = ctk.CTkLabel(master=user_frame, text=f"request history of {username}:", font=("Arial", 14, "bold"))
+        username_label.pack(anchor="w")
+
+        # Create a label for each search with a smaller font size
+        for search in searches:
+            search_label = ctk.CTkLabel(master=user_frame, text=f"Name:  - {search}", font=("Arial", 12))
+            search_label.pack(anchor="w")
+
+    # add a close button to the window
+    close_button = ctk.CTkButton(master=search_result_window, text="Close", command=search_result_window.destroy)
+    close_button.pack(pady=10)
+
+
+def add_client_checkbox(client_socket, username, ip_address):  
+    # Add a checkbox for the client to the clients_frame
+    list_text = f"{username} - ({ip_address})"
+    client_frame = ctk.CTkFrame(master=clients_frame)
+    checkbox_var = ctk.IntVar()
+    checkbox = ctk.CTkCheckBox(master=client_frame, variable=checkbox_var, text=list_text)
+    checkbox.pack(side="left")
+    client_frame.pack(fill="x", padx=10, pady=5)
+    # log the client and the checkbox for knowing which client is selected
+    client_checkboxes[client_socket] = client_frame
+
+
+def display_message(message):   # Display a message in the message display
+    message_display.configure(state="normal")
+    message_display.insert(ctk.END, message + "\n")
+    message_display.configure(state="disabled")
+    message_display.see(ctk.END)
+
+
+def on_send():
+    global message_input
+    # get the message from the input field and broadcast it to all clients
+    message = message_input.get().strip()
+    if message:
+        broadcast_message(message)
+        message_input.delete(0, ctk.END)
+
+
+def send_warning():
+    global message_input
+    # add warning prefix to the message
+    message = "WARNING" + message_input.get().strip()
+    if message:
+        broadcast_message(message, sender_socket=None)
+        message_input.delete(0, ctk.END)
+
+
+def update_client_list_display():
+    for widget in clients_frame.winfo_children():
+        widget.destroy()
+    for client_socket in clients:
+        username = clients[client_socket]["username"]
+        ip_address = clients[client_socket]["address"]
+        add_client_checkbox(client_socket, username, ip_address)
+
+
+# ================= Server Functions ================
 def start_server():
     global server_socket, server_thread, server_running, server_status, dataset, user_credentials, search_history
 
@@ -127,27 +199,40 @@ def start_server():
         server_thread.start()
         server_status.configure(text="Server Status: Running", fg_color="green")
 
-        # Load the dataset when the server starts
-        preprocessor = Dataset("./data/Animal_Crossing_Villagers.csv")
-        dataset = preprocessor.preprocess_data()
-        # get the species and personality heatmap and boxplots
-        preprocessor.species_personality_heatmap()
-        preprocessor.analyze_boxplots()
+        logging.info("Server started")
+
+        try:
+            # Load the dataset when the server starts
+            preprocessor = Dataset("./data/Animal_Crossing_Villagers.csv")
+            dataset = preprocessor.preprocess_data()
+            # get the species and personality heatmap and boxplots
+            preprocessor.species_personality_heatmap()
+            preprocessor.analyze_boxplots()
+        except Exception as e:
+            logging.error(f"Error loading dataset: {e}")
 
         user_credentials = load_credentials()
         search_history = load_search_history()
 
-        logging.info("Server started")
 
 def stop_server():
     global server_running, server_status
     # check if the server is running
     if server_running:
         # set server running to false and close all connections
-        server_running = False      
-        close_all_connections()
+        server_running = False          # Set flag to false
+        close_all_connections()         # Close all connections
         server_status.configure(text="Server Status: Stopped", fg_color="red")
         logging.info("Server stopped")
+
+
+def update_server_status(status):
+    global server_status
+    # Update the server status label with the provided status
+    # Set the color to green if the server is running, red if stopped
+    color = "green" if status == "Running" else "red"
+    server_status.configure(text=f"Server Status: {status}", fg_color=("white", color))
+
 
 def accept_connections():
     global sockets_list
@@ -178,6 +263,7 @@ def accept_connections():
         logging.error(f"Server accept loop error: {e}")
     finally:
         logging.info("Server accept loop has ended")
+
 
 def close_all_connections():
     # When the server is stopped, we need to close all connections
@@ -211,6 +297,47 @@ def close_all_connections():
 
     logging.info("All connections closed.")
 
+
+def remove_client(client_socket):
+    with clients_lock:
+        if client_socket in sockets_list:
+            sockets_list.remove(client_socket)
+        client_info = clients.pop(client_socket, None)
+        if client_info:
+            logging.info(f"Client {client_info["username"]} at {client_info["address"]} has disconnected")
+        if client_socket in client_checkboxes:
+            checkbox_frame = client_checkboxes.pop(client_socket)
+            checkbox_frame.destroy()
+    update_client_list_display()
+
+
+def broadcast_message(message, sender_socket=None):
+    # Serialize the message only once for efficiency
+    serialized_message = pickle.dumps(message)
+
+    # Check if any checkboxes are selected
+    selected_clients = [client_socket for client_socket, checkbox_frame in client_checkboxes.items() 
+                        if checkbox_frame.winfo_children()[0].winfo_exists() and 
+                        checkbox_frame.winfo_children()[0].get() == 1]
+
+    # If no checkboxes are selected, send to all clients
+    if not selected_clients:
+        selected_clients = list(client_checkboxes.keys())
+
+    # Loop over all selected clients and send the message
+    for client_socket in selected_clients:
+        try:
+            client_socket.send(serialized_message)
+        except Exception as e:
+            logging.error(f"Error sending message to {clients[client_socket]['username']}: {e}")
+            remove_client(client_socket)
+
+
+
+
+
+
+# ================= Server Data Functions ================
 def request_details():
     # get the selected clients and display their details
     user_credentials = load_credentials()
@@ -237,34 +364,6 @@ def request_details():
             else:
                 logging.warning(f"No details found for {username}")
 
-def show_search_history_in_window(search_data):
-    # Create a top-level window
-    search_result_window = ctk.CTkToplevel(app)
-    search_result_window.title("Search History")
-    search_result_window.geometry("500x600")  # Adjust size as needed
-
-    # create a scrollable frame for the search history
-    scroll_frame = ctk.CTkScrollableFrame(master=search_result_window)
-    scroll_frame.pack(fill="both", expand=True, padx=10, pady=10)
-
-    # Loop over the search data and display it in the scrollable frame
-    for username, searches in search_data.items():
-        # Create a frame for each user
-        user_frame = ctk.CTkFrame(master=scroll_frame)
-        user_frame.pack(fill="x", pady=5)
-
-        # Create a label for the username with a larger font size
-        username_label = ctk.CTkLabel(master=user_frame, text=f"request history of {username}:", font=("Arial", 14, "bold"))
-        username_label.pack(anchor="w")
-
-        # Create a label for each search with a smaller font size
-        for search in searches:
-            search_label = ctk.CTkLabel(master=user_frame, text=f"Name:  - {search}", font=("Arial", 12))
-            search_label.pack(anchor="w")
-
-    # add a close button to the window
-    close_button = ctk.CTkButton(master=search_result_window, text="Close", command=search_result_window.destroy)
-    close_button.pack(pady=10)
 
 def request_search_history():
     global search_history, clients, client_checkboxes
@@ -294,8 +393,6 @@ def request_search_history():
     except Exception as e:
         logging.error(f"Error processing search history: {e}")
 
-
-    
 
 def write_to_search_history(username, search):
     logging.info(f"Writing search history for {username}: {search}")
@@ -327,49 +424,51 @@ def write_to_search_history(username, search):
         logging.error(f"Failed to write to file: {e}")
 
 
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
 
 
+def load_credentials():
+    user_credentials = {}
+    credentials_path = "./data/user_credentials.txt"
+    try:
+        if not os.path.exists(credentials_path):
+            with open(credentials_path, "w") as file:
+                logging.info("Credentials file created.")
+        with open(credentials_path, "r") as file:
+            for line in file:
+                if line.strip():
+                    username, hashed_pwd = line.strip().split(",", 1)
+                    user_credentials[username] = hashed_pwd
+    except IOError as e:
+        logging.error(f"Failed to read credentials file: {e}")
+    logging.info(f"Loaded credentials successfully")
+    return user_credentials
 
-# def add_search_to_history(username, searchname):
-#     global search_history
-#     if username in search_history:
-#         search_history[username].append(searchname)
-#     else:
-#         search_history[username] = [searchname]
+
+def load_search_history():
+    global search_history_path
+    search_history_path = "./data/search_history.txt"
+    search_history = {}
+    try:
+        if not os.path.exists(search_history_path):
+            with open(search_history_path, "w") as file:
+                logging.info("Search history file created.")
+        with open(search_history_path, "r") as file:
+            for line in file:
+                if line.strip():
+                    username, search = line.strip().split(",", 1)
+                    if username in search_history:
+                        search_history[username].append(search)
+                    else:
+                        search_history[username] = [search]
+    except IOError as e:
+        logging.error(f"Failed to read search history file: {e}")
+    logging.info(f"Loaded search history successfully")
+    return search_history
 
 
-
-
-
-
-
-
-
-
-    
-
-def on_send():
-    global message_input
-    # get the message from the input field and broadcast it to all clients
-    message = message_input.get().strip()
-    if message:
-        broadcast_message(message)
-        message_input.delete(0, ctk.END)
-
-def send_warning():
-    global message_input
-    # add warning prefix to the message
-    message = "WARNING" + message_input.get().strip()
-    if message:
-        broadcast_message(message, sender_socket=None)
-        message_input.delete(0, ctk.END)
-
-def display_message(message):
-    message_display.configure(state="normal")
-    message_display.insert(ctk.END, message + "\n")
-    message_display.configure(state="disabled")
-    message_display.see(ctk.END)
-
+# ================= Dataset Data Functions ================
 def process_client_message(client_socket):
     try:
         message = client_socket.recv(1024)
@@ -433,6 +532,7 @@ def process_client_message(client_socket):
     except Exception as e:
         logging.error(f"Error handling message: {e}")
 
+
 def handle_request_bar_graph1(data_type, client_socket):
     # graph data is column name, get the unique values and their counts to send to the client
     global dataset
@@ -452,6 +552,7 @@ def handle_request_bar_graph1(data_type, client_socket):
         client_socket.send(pickle.dumps(response))
     except Exception as e:
         logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
+
 
 def handle_request_bar_graph2(data_type, client_socket):
     global dataset  
@@ -474,6 +575,7 @@ def handle_request_bar_graph2(data_type, client_socket):
     except Exception as e:
         logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
         
+
 def handle_request_bar_graph3(data_type, client_socket):
     # depending on data_type graph catchphrases by beginning letter, amount of words, and amount of letters.
     global dataset
@@ -537,6 +639,7 @@ def handle_request_search_villagers(parameters, client_socket):
     except Exception as e:
         logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
 
+
 def handle_request_data_parameters(message, client_socket):
     global dataset
     if dataset is None:
@@ -562,97 +665,6 @@ def handle_request_data_parameters(message, client_socket):
     except Exception as e:
         logging.error(f"Error sending response to {clients[client_socket]["username"]}: {e}")
         remove_client(client_socket)
-
-def remove_client(client_socket):
-    with clients_lock:
-        if client_socket in sockets_list:
-            sockets_list.remove(client_socket)
-        client_info = clients.pop(client_socket, None)
-        if client_info:
-            logging.info(f"Client {client_info["username"]} at {client_info["address"]} has disconnected")
-        if client_socket in client_checkboxes:
-            checkbox_frame = client_checkboxes.pop(client_socket)
-            checkbox_frame.destroy()
-    update_client_list_display()
-
-def update_client_list_display():
-    for widget in clients_frame.winfo_children():
-        widget.destroy()
-    for client_socket in clients:
-        username = clients[client_socket]["username"]
-        ip_address = clients[client_socket]["address"]
-        add_client_checkbox(client_socket, username, ip_address)
-
-def add_client_checkbox(client_socket, username, ip_address):
-    list_text = f"{username} - ({ip_address})"
-    client_frame = ctk.CTkFrame(master=clients_frame)
-    checkbox_var = ctk.IntVar()
-    checkbox = ctk.CTkCheckBox(master=client_frame, variable=checkbox_var, text=list_text)
-    checkbox.pack(side="left")
-    client_frame.pack(fill="x", padx=10, pady=5)
-    client_checkboxes[client_socket] = client_frame
-
-def broadcast_message(message, sender_socket=None):
-    # Serialize the message only once for efficiency
-    serialized_message = pickle.dumps(message)
-
-    # Check if any checkboxes are selected
-    selected_clients = [client_socket for client_socket, checkbox_frame in client_checkboxes.items() 
-                        if checkbox_frame.winfo_children()[0].winfo_exists() and 
-                        checkbox_frame.winfo_children()[0].get() == 1]
-
-    # If no checkboxes are selected, send to all clients
-    if not selected_clients:
-        selected_clients = list(client_checkboxes.keys())
-
-    # Loop over all selected clients and send the message
-    for client_socket in selected_clients:
-        try:
-            client_socket.send(serialized_message)
-        except Exception as e:
-            logging.error(f"Error sending message to {clients[client_socket]['username']}: {e}")
-            remove_client(client_socket)
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def load_credentials():
-    user_credentials = {}
-    credentials_path = "./data/user_credentials.txt"
-    try:
-        if not os.path.exists(credentials_path):
-            with open(credentials_path, "w") as file:
-                logging.info("Credentials file created.")
-        with open(credentials_path, "r") as file:
-            for line in file:
-                if line.strip():
-                    username, hashed_pwd = line.strip().split(",", 1)
-                    user_credentials[username] = hashed_pwd
-    except IOError as e:
-        logging.error(f"Failed to read credentials file: {e}")
-    logging.info(f"Loaded credentials successfully")
-    return user_credentials
-
-def load_search_history():
-    global search_history_path
-    search_history_path = "./data/search_history.txt"
-    search_history = {}
-    try:
-        if not os.path.exists(search_history_path):
-            with open(search_history_path, "w") as file:
-                logging.info("Search history file created.")
-        with open(search_history_path, "r") as file:
-            for line in file:
-                if line.strip():
-                    username, search = line.strip().split(",", 1)
-                    if username in search_history:
-                        search_history[username].append(search)
-                    else:
-                        search_history[username] = [search]
-    except IOError as e:
-        logging.error(f"Failed to read search history file: {e}")
-    logging.info(f"Loaded search history successfully")
-    return search_history
 
 
 def handle_register(message, client_socket):
@@ -721,6 +733,8 @@ def handle_login(message, client_socket):
     except Exception as e:
         logging.error(f"Error sending response to {username}: {e}")
 
+
+# ================= Main Function ================
 if __name__ == "__main__":
     try:
         app = create_server_gui()       # Create the server GUI
