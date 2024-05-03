@@ -280,6 +280,11 @@ def handle_request4():
     personality = request4_personality.get() if request4_personality.get() != "" else None
     hobby = request4_hobby.get() if request4_hobby.get() != "" else None
 
+    # Do a check to see if at least one of the values is not None
+    if species is None and personality is None and hobby is None:
+        msgbox.showwarning("Search Error", "Please select at least one search parameter.")
+        return
+
     # send the request to the clienthandler
     client_handler.request_search_villagers(species, personality, hobby)
     logging.info(f"Search request sent, species: {species}, personality: {personality}, hobby: {hobby}")

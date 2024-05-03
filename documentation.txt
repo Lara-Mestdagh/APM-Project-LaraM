@@ -34,3 +34,9 @@ Lastly you can select the options for species, personality and hobby to filter t
 filled with the result of the search. if a parameter is left empty it does not apply.
 
 I realised a terrible mistake way too late to fix it properly so right now the clienthandler is part of the client code, not the server.
+
+sadly I didn't have enough time to fix this so I went with what I had since that did work, I changed some code to work better and handled the 
+user history as well.
+
+Finally I went over my code to order it in a logical send en make sure there were comments to my liking. I also double check that no code is unused
+and I have good naming coneventions.

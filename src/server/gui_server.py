@@ -531,6 +531,7 @@ def process_client_message(client_socket):
             logging.error(f"Unknown message type: {message["type"]}")
     except Exception as e:
         logging.error(f"Error handling message: {e}")
+        remove_client(client_socket)
 
 
 def handle_request_bar_graph1(data_type, client_socket):
