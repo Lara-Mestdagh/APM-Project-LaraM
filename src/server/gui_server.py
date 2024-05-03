@@ -260,9 +260,7 @@ def accept_connections():
                 else:
                     process_client_message(notified_socket)
     except Exception as e:
-        logging.error(f"Server accept loop error: {e}")
-    finally:
-        logging.info("Server accept loop has ended")
+        logging.error(f"Server accept loop error: {e} - ending loop")
 
 
 def close_all_connections():
@@ -333,10 +331,6 @@ def broadcast_message(message, sender_socket=None):
             remove_client(client_socket)
 
 
-
-
-
-
 # ================= Server Data Functions ================
 def request_details():
     # get the selected clients and display their details
@@ -394,13 +388,7 @@ def request_search_history():
         logging.error(f"Error processing search history: {e}")
 
 
-def write_to_search_history(username, search):
-    logging.info(f"Writing search history for {username}: {search}")
-    logging.debug(f"Type of search content: {type(search)}, Content: {search}")
-    
-    # Print the search history before updating it
-    logging.debug(f"Search history before: {search_history}")
-    
+def write_to_search_history(username, search):    
     # Add the search to the search history
     if username in search_history:
         if isinstance(search_history[username], list):
@@ -409,9 +397,6 @@ def write_to_search_history(username, search):
             search_history[username] = [search]
     else:
         search_history[username] = [search]
-    
-    # Print the search history after updating it
-    logging.debug(f"Search history after: {search_history}")
     
     # Write the search history to the file
     search_history_path = "./data/search_history.txt"
@@ -422,6 +407,8 @@ def write_to_search_history(username, search):
                     file.write(f"{user},{each_search}\n")
     except IOError as e:
         logging.error(f"Failed to write to file: {e}")
+
+    logging.info(f"Search history updated for {username}")
 
 
 def hash_password(password):
@@ -442,7 +429,6 @@ def load_credentials():
                     user_credentials[username] = hashed_pwd
     except IOError as e:
         logging.error(f"Failed to read credentials file: {e}")
-    logging.info(f"Loaded credentials successfully")
     return user_credentials
 
 
@@ -464,7 +450,6 @@ def load_search_history():
                         search_history[username] = [search]
     except IOError as e:
         logging.error(f"Failed to read search history file: {e}")
-    logging.info(f"Loaded search history successfully")
     return search_history
 
 
@@ -507,17 +492,17 @@ def process_client_message(client_socket):
             logging.info(f"Client {clients[client_socket]["username"]} has requested to register")
             handle_register(message, client_socket)
         elif message["type"] == "request_bar_graph1":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 1")
+            logging.info(f"Client {clients[client_socket]["username"]} has requested bar graph 1")
             data_type = message["data_type"]
             handle_request_bar_graph1(data_type, client_socket)
             write_to_search_history(clients[client_socket]["username"], "request_bar_graph1")
         elif message["type"] == "request_bar_graph2":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 2")
+            logging.info(f"Client {clients[client_socket]["username"]} has requested bar graph 2")
             data_type = message["data_type"]
             handle_request_bar_graph2(data_type, client_socket)
             write_to_search_history(clients[client_socket]["username"], "request_bar_graph2")
         elif message["type"] == "request_bar_graph3":
-            logging.info(f"Client {clients[client_socket]["username"]} has requested a bar graph 3")
+            logging.info(f"Client {clients[client_socket]["username"]} has requested bar graph 3")
             data_type = message["data_type"]
             handle_request_bar_graph3(data_type, client_socket)
             # logging.info(f"Client {clients
@@ -612,7 +597,6 @@ def handle_request_bar_graph3(data_type, client_socket):
 
 
 def handle_request_search_villagers(parameters, client_socket):
-    logging.info(f"Searching villagers with parameters: {parameters}")
     global dataset
     if dataset is None:
         response = {"type": "search_results", "status": "failure", "message": "Dataset not loaded"}
@@ -659,7 +643,6 @@ def handle_request_data_parameters(message, client_socket):
             "Hobby": hobby_values
         }
         response = {"type": "data_parameters", "status": "success", "columns": columns, "columns_values": columns_values}
-        logging.info("Data parameters sent successfully")
 
     try:
         client_socket.send(pickle.dumps(response))
