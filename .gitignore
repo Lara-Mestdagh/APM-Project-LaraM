@@ -3,6 +3,13 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 
+# Ignore everything in the data directory
+data/*
+
+# But not this file
+!data/Animal_Crossing_Villagers.csv
+
+
 # Ignore everything in the logs directory
 /logs/*
 
