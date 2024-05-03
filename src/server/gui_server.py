@@ -73,7 +73,7 @@ def create_server_gui():
     details_button.pack(side="right")
 
     # request search history button
-    history_button = ctk.CTkButton(master=button_frame, text="Get Search History", command=request_search_history)
+    history_button = ctk.CTkButton(master=button_frame, text="Get Request History", command=request_search_history)
     history_button.pack(side="left")
 
     clients_frame = ctk.CTkFrame(master=app)
@@ -249,11 +249,18 @@ def show_search_history_in_window(search_data):
 
     # Loop over the search data and display it in the scrollable frame
     for username, searches in search_data.items():
-        username_label = ctk.CTkLabel(master=scroll_frame, text=f"Search history for {username}", font=("Arial", 12, "bold"))
-        username_label.pack(pady=5)
+        # Create a frame for each user
+        user_frame = ctk.CTkFrame(master=scroll_frame)
+        user_frame.pack(fill="x", pady=5)
+
+        # Create a label for the username with a larger font size
+        username_label = ctk.CTkLabel(master=user_frame, text=f"request history of {username}:", font=("Arial", 14, "bold"))
+        username_label.pack(anchor="w")
+
+        # Create a label for each search with a smaller font size
         for search in searches:
-            search_label = ctk.CTkLabel(master=scroll_frame, text=search)
-            search_label.pack(pady=2)
+            search_label = ctk.CTkLabel(master=user_frame, text=f"Name:  - {search}", font=("Arial", 12))
+            search_label.pack(anchor="w")
 
     # add a close button to the window
     close_button = ctk.CTkButton(master=search_result_window, text="Close", command=search_result_window.destroy)
